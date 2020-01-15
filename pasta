@@ -35,8 +35,6 @@ pasta_usage() {
         Paste the copypasta to a file.
     $PROGRAM inspect|show PASTA_NAME
         Show the copypasta.
-    $PROGRAM inspect|show PASTA_NAME
-        Show the copypasta.
     $PROGRAM [list|ls] [DIRECTORY]
         List copypastas.
     $PROGRAM find PASTA_NAMES
