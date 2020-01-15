@@ -1,0 +1,348 @@
+#!/bin/bash
+
+set -euo pipefail 
+
+[[ -z ${DEBUG+x} ]] || set -x
+
+# BEGIN command functions
+
+pasta_version() {
+  local version="pasta 0.1"
+  if which figlet >/dev/null
+  then
+    figlet "$version"
+  else
+    echo "$version"
+  fi
+}
+
+pasta_usage() {
+  pasta_version
+  echo
+  echo "Usage:
+    $PROGRAM init [DIRECTORY]
+        Initialize the copypasta storage.
+        If DIRECTORY is not provided, it will be initialized to ~/.pastas.
+    $PROGRAM save PASTA_NAME
+        Save the data on the clipboard as PASTA_NAME.
+    $PROGRAM insert PASTA_NAME
+        Open a text editor to write a copypasta.
+    $PROGRAM file PASTA_NAME
+        Save the file as PASTA_NAME.
+    $PROGRAM [load] PASTA_NAME
+        Place the existing copypasta on the clipboard.
+    $PROGRAM paste PASTA_NAME FILE
+        Paste the copypasta to a file.
+    $PROGRAM inspect|show PASTA_NAME
+        Show the copypasta.
+    $PROGRAM inspect|show PASTA_NAME
+        Show the copypasta.
+    $PROGRAM [list|ls] [DIRECTORY]
+        List copypastas.
+    $PROGRAM find PASTA_NAMES
+        List copypastas which match the pasta names.
+    $PROGRAM grep SEARCH_STRING
+        Search copypastas which contain the search string.
+    $PROGRAM alias|ln [--symbolic,-s] [--force,-f] PASTA_1 PASTA_2
+        Create a link to PASTA_1 named PASTA_2.
+    $PROGRAM cp [--force,-f] PASTA_1 PASTA_2
+        Create a copy of PASTA_1 named PASTA_2.
+    $PROGRAM rename|mv [--force,-f] PASTA_1 PASTA_2
+        Rename PASTA_1 to PASTA_2
+    $PROGRAM delete|remove|rm [--recursive,-r] [--force,-f] PASTA_NAME
+        Delete the copypasta.
+    $PROGRAM edit PASTA_NAME
+        Edit the copypasta.
+    $PROGRAM help|usage
+        Display this help message.
+    $PROGRAM version
+        Display version information."
+}
+
+pasta_init() {
+  [[ "$#" -le 1 ]] || quit "Usage: $PROGRAM init [PASTA_DIRECTORY]"
+  check_exists "$PASTA_SETTINGS" "A pasta directory"
+  local pasta_dir="$HOME/.pastas"
+  if [[ "$#" -eq 1 ]]
+  then
+    pasta_dir="$1"
+  fi
+  pasta_dir="$(realpath "$pasta_dir")"
+  echo "$pasta_dir" >"$PASTA_SETTINGS"
+  mkdir -p -v "$pasta_dir"
+  echo Initialized the pasta directory at $pasta_dir.
+}
+
+pasta_save() {
+  local pasta_name
+  [[ "$#" -ge 1 ]] && pasta_name="$*" || quit "Usage: $PROGRAM save PASTA_NAME"
+  check_pasta_name "$pasta_name"
+  local temp_file
+  create_temp_file temp_file
+  [[ -f "$temp_file" ]]
+  if clipboard_is_image
+  then
+    $imgpaste > "$temp_file"
+    create_pasta_from_file "$temp_file" image "$pasta_name"
+  else
+    $textpaste > "$temp_file" 2>/dev/null || quit "Error: the clipboard is empty"
+    create_pasta_from_file "$temp_file" text "$pasta_name"
+  fi
+}
+
+pasta_insert() {
+  local pasta_name
+  [[ "$#" -ge 1 ]] && pasta_name="$*" || quit "Usage: $PROGRAM insert PASTA_NAME"
+  check_pasta_name "$pasta_name"
+  local temp_file
+  create_temp_file temp_file
+  # remove the temporary file to detect a difference between exiting the
+  # editor without doing anything and choosing to write an empty file
+  rm "$temp_file"
+  ${EDITOR:-vi} "$temp_file"
+  [[ -f "$temp_file" ]] || userquit "Pasta not created."
+  create_pasta_from_file "$temp_file" text "$pasta_name"
+}
+
+pasta_file() {
+  local file pasta_name
+  [[ $# -ge 2 ]] && file="$1" && pasta_name="${*:2}" || quit "Usage: $PROGRAM file FILE PASTA_NAME"
+  [[ -f "$file" ]] || { [[ -d "$file" ]] && quit "Error: ${file} is a directory"; } || quit "Error: no file '${file}' exists"
+  check_pasta_name "$pasta_name"
+  local mimetype="$(file --mime-type -b "$file")"
+  local ftype="$(cut -d'/' -f1 <<< "$mimetype")"
+  create_pasta_from_file "$file" "$ftype" "$pasta_name" "$mimetype"
+}
+
+pasta_load() {
+  not_implemented
+}
+
+pasta_pastefile() {
+  not_implemented
+}
+
+pasta_show() {
+  not_implemented
+}
+
+pasta_list() {
+  not_implemented
+}
+
+pasta_load_or_list() {
+  not_implemented
+}
+
+pasta_find() {
+  not_implemented
+}
+
+pasta_grep() {
+  not_implemented
+}
+
+pasta_alias() {
+  not_implemented
+}
+
+pasta_move() {
+  not_implemented
+}
+
+pasta_delete() {
+  not_implemented
+}
+
+pasta_edit() {
+  not_implemented
+}
+
+# END command functions
+
+
+# BEGIN helper functions
+
+not_implemented() {
+  quit "This functionality has not been implemented yet!"
+}
+
+echoerr() {
+  echo "$@" >&2
+}
+
+# exit with an error message
+quit() {
+  echoerr "$@"
+  exit 2
+}
+
+# exit with an error message but with the user-cancelled error code
+userquit() {
+  echoerr "$@"
+  exit 3
+}
+
+# prompt the user for a yes or no question and exit if no
+yesno() {
+  local answer
+  read -r -p "$1 [yN] " answer
+  [[ "$answer" == [yY] ]] || exit 3
+}
+
+get_pasta_dir() {
+  [[ -f "$PASTA_SETTINGS" ]] || quit "Pasta has not been initialized. Please run:
+  $PROGRAM init
+before using pasta."
+  PASTA_DIR="$(< "$PASTA_SETTINGS")"
+  [[ -d "$PASTA_DIR" ]] || quit "Pasta has not been initialized properly. Please run:
+  $PROGRAM init"
+}
+
+# Usage: check_exists FILE DESCRIPTION
+check_exists() {
+  [[ ! -f "$1" ]] || yesno "$2 already exists. Overwrite it?"
+}
+
+# Usage: check pasta_name_safety PASTA_NAME
+check_pasta_name_safety() {
+  local name="$1"
+  [[ "$name" != ".." ]] && [[ ! "$name" =~ ^"../" ]] && [[ ! "$name" =~ "/.."$ ]] && [[ ! "$name" =~ "/../" ]] || quit "${name} is an invalid pasta name, remove '..' from the name"
+}
+
+# Usage: check_name_exists PASTA_NAME
+check_name_exists() {
+  local pasta_name="$1"
+  local pasta_txt_file="${PASTA_DIR}/${pasta_name}.txt"
+  local pasta_img_file="${PASTA_DIR}/${pasta_name}.png"
+  [[ ! -f "$pasta_txt_file" ]] && [[ ! -f "$pasta_img_file" ]] || yesno "${pasta_name} already exists. Overwrite it?"
+}
+
+# boilerplate to verify that a pasta name is valid
+# Usage: check_pasta_name PASTA_NAME
+check_pasta_name() {
+  local pasta_name="$1"
+  get_pasta_dir
+  check_pasta_name_safety "$pasta_name"
+  check_name_exists "$pasta_name"
+}
+
+# succeeds if the data on the clipboard is an image
+clipboard_is_image() {
+  [[ "$SYSTEM" =~ ^Linux ]] && xclip -sel clipboard -o -t TARGETS 2>/dev/null | grep image >/dev/null 2>&1
+}
+
+TEMP_FILES=()
+
+# creates a temp file and saves its name to the given variable
+# Usage: create_temp_file VARIABLE_NAME [EXTENSION]
+create_temp_file() {
+  local var_name="$1"
+  local ext="${2:-}"
+  local _temp_file="$(mktemp)"
+  if [[ -n "$ext" ]]
+  then
+    mv "$_temp_file" "${_temp_file}.$ext"
+    _temp_file="${_temp_file}.$ext"
+  fi
+  # add the current file to the set of tempfiles to delete
+  # this is necessary because only one function can be trapped per signal
+  TEMP_FILES+=("$_temp_file")
+  trap "rm -f ${TEMP_FILES[*]}" INT TERM EXIT
+  read "$var_name" <<< "$_temp_file"
+}
+
+# ensures the parent directories of a file exists
+# Usage: ensure_parent_dirs FILE
+ensure_parent_dirs() {
+  mkdir -p "$(dirname "$1")"
+}
+
+# creates a pasta file from an existing file
+# Usage: create_pasta_from_file FILE image_or_text PASTA_NAME [DETECTED_MIME_TYPE]
+create_pasta_from_file() {
+  local source_file="$1"
+  local file_type="$2"
+  local pasta_name="$3"
+  local pasta_file="${PASTA_DIR}/${pasta_name}"
+  # if a previous function already did the work to detect the file type, no need to detect it again
+  local detected_type="${4:-$(file --mime-type -b "$source_file")}"
+  if [[ "$detected_type" == "inode/x-empty" ]]
+  then
+    quit "Error: ${source_file} is empty"
+  elif [[ ! "$detected_type" =~ ^text ]] && [[ ! "$detected_type" =~ ^image ]]
+  then
+    quit "Error: unknown MIME type $detected_type"
+  elif [[ ! "$detected_type" =~ ^"$file_type" ]]
+  then
+    echoerr "Error: given type ${file_type} does not match detected type ${detected_type}"
+    exit 1
+  fi
+  case "$file_type" in
+    image)
+      pasta_file="${pasta_file}.png"
+      # convert to png if necessary
+      if [[ "$detected_type" != "image/png" ]]
+      then
+        local temp_png
+        create_temp_file temp_png png
+        convert "$source_file" "$temp_png"
+        source_file="$temp_png"
+      fi
+      ;;
+    text) pasta_file="${pasta_file}.txt" ;;
+    # default case should never be called
+    *) echoerr "Error: unknown declared file type $file_type"; exit 1 ;;
+  esac
+  # ensure the parent directory exists
+  ensure_parent_dirs "$pasta_file" >/dev/null
+  cp "$source_file" "$pasta_file"
+  echo "Saved ${file_type} pasta '${pasta_name}'"
+}
+# END helper functions
+
+SYSTEM="$(uname -s)"
+case "$SYSTEM" in
+  Linux*)
+    which xclip >/dev/null || quit "Could not find clipboard provider on this system"
+    textcopy="xclip -selection clipboard -i"
+    textpaste="xclip -selection clipboard -o"
+    # png data seems to work best for pasting into browsers
+    imgcopy="xclip -selection clipboard -t image/png -i"
+    imgpaste="xclip -selection clipboard -t image/png -o"
+    ;;
+  Darwin*)
+    which pbcopy >/dev/null || which pbpaste >/dev/null || quit "Could not find clipboard provider on this system"
+    textcopy="pbcopy"
+    textpaste="pbpaste"
+    imgcopy="quit 'Copying and pasting images is unsupported in MacOS at the moment'"
+    imgpaste="quit 'Copying and pasting images is unsupported in MacOS at the moment'"
+    ;;
+  *)
+    quit "pasta is not supported on this system."
+esac
+
+PROGRAM="${0##*/}"
+[[ "$#" -gt 0 ]] && COMMAND="$1" || COMMAND=""
+[[ -n ${PASTA_SETTINGS+x} ]] || PASTA_SETTINGS="$HOME/.pasta"
+
+case "$COMMAND" in
+  init) shift; pasta_init "$@" ;;
+  save) shift; pasta_save "$@" ;;
+  insert) shift; pasta_insert "$@" ;;
+  file) shift; pasta_file "$@" ;;
+  load) shift; pasta_load "$@" ;;
+  paste) shift; pasta_pastefile "$@" ;;
+  inspect|show) shift; pasta_show "$@" ;;
+  list|ls) shift; pasta_list "$@" ;;
+  find|search) shift; pasta_find "$@" ;;
+  grep) shift; pasta_grep "$@" ;;
+  alias|ln) shift; pasta_alias "$@" ;;
+  cp|rename|mv) shift; pasta_move "$@" ;;
+  delete|remove|rm) shift; pasta_delete "$@" ;;
+  edit) shift; pasta_edit "$@" ;;
+  ""|help|--help|usage) shift; pasta_usage ;;
+  version|--version) shift; pasta_version ;;
+  *) pasta_load_or_list "$@" ;;
+esac
+exit 0
