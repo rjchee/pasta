@@ -85,21 +85,4 @@ bats test
 ```
 
 # Roadmap
-- [X] `pasta save`
-- [X] `pasta insert`
-- [X] `pasta file`
-- [ ] `pasta load`
-- [ ] `pasta paste`
-- [ ] `pasta show`
-- [ ] `pasta list`
-- [ ] `pasta find`
-- [ ] `pasta grep`
-- [ ] `pasta alias`
-- [ ] `pasta cp`
-- [ ] `pasta rename`
-- [ ] `pasta delete`
-- [ ] `pasta edit`
-- [X] `pasta usage`
-- [X] `pasta version`
-- [ ] Support MacOS
-- [ ] Bash completions
+The roadmap for this project is outlined in the [wiki](https://github.com/rjchee/pasta/wiki/Roadmap).
