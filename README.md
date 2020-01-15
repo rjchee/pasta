@@ -79,7 +79,26 @@ emoji/thinking_face as your PASTA_NAME.
 
 
 # Testing
-This repo is uses [BATS](https://github.com/bats-core/bats-core) for testing. To run all the tests, use
+This repo uses [BATS](https://github.com/bats-core/bats-core) for testing. To run all the tests, use
 ```
 bats test
 ```
+
+# Roadmap
+- [X] `pasta save`
+- [X] `pasta insert`
+- [X] `pasta file`
+- [ ] `pasta load`
+- [ ] `pasta paste`
+- [ ] `pasta show`
+- [ ] `pasta list`
+- [ ] `pasta find`
+- [ ] `pasta grep`
+- [ ] `pasta alias`
+- [ ] `pasta cp`
+- [ ] `pasta rename`
+- [ ] `pasta delete`
+- [ ] `pasta edit`
+- [X] `pasta usage`
+- [X] `pasta version`
+- [ ] Support MacOS
