@@ -102,3 +102,4 @@ bats test
 - [X] `pasta usage`
 - [X] `pasta version`
 - [ ] Support MacOS
+- [ ] Bash completions
