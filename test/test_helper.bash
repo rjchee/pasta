@@ -5,6 +5,8 @@ case "$SYSTEM" in
   Linux*)
     copy_text="xclip -selection clipboard -i"
     copy_img="xclip -selection clipboard -t image/png -i"
+    paste_text="xclip -selection clipboard -o"
+    paste_img="xclip -selection clipboard -t image/png -o"
     clear_clip="xsel -bc"
     ;;
   Darwin*)
@@ -17,28 +19,27 @@ case "$SYSTEM" in
     ;;
 esac
 
-# writes binary data to stdout
+# Writes binary data to stdout.
 get_binary_data () {
-  # string of 0 bytes should be detected as an application/octet-stream file
+  # String of 0 bytes should be detected as an application/octet-stream file
   dd if=/dev/zero bs=1000 count=1 2>/dev/null
 }
 
-# writes random text data to stdout
-get_random_text () {
-  dd if=/dev/urandom bs=20 count=1 2>/dev/null | hexdump
+# Writes a random image to the given filename. If the width and height are not given, they default to 32.
+# Usage: create_random_img FILENAME [WIDTH] [HEIGHT]
+create_white_img () {
+  local file="$1"
+  local w="${2:-32}"
+  local h="${3:-32}"
+  convert -size "${w}x${h}" xc:white "$file"
 }
 
-# creates a random image and writes it to the given file name
-create_random_img () {
-  dd if=/dev/urandom bs=3072 count=1 2>/dev/null | convert -depth 8 -size 32x32 RGB:- "$1"
-}
-
-# takes the given arguments and copies it to the clipboard as space separated text
+# Takes the given arguments and copies it to the clipboard as space separated text.
 argcopy() {
   $copy_text <<< "$*"
 }
 
-# diff but for images
+# Diff but for images.
 # Usage: imgdiff IMAGE_1 IMAGE_2 [DIFF_FILE_SUFFIX]
 imgdiff() {
   compare -metric AE "$1" "$2" "${TMP_DIR}/diff${3:-}.png"
@@ -48,7 +49,20 @@ check_no_pastas() {
   [[ -z "$(ls -A "$PASTA_DIR")" ]]
 }
 
-# removes the debug prints for set -x when checking an output
+# Removes the debug prints for set -x when checking an output.
 clean_output() {
   out="$(grep -v '^\+* ' <<< "$output")"
+}
+
+# Tests that the clipboard is empty (only works on Linux as of now).
+clipboard_is_empty() {
+  [[ "$SYSTEM" =~ ^"Linux" ]]
+  run $paste_text
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == "Error: target STRING not available" ]]
+}
+
+# Ensures that all of the parent dirs for a file exist so that the file can be written.
+ensure_parent_dirs() {
+  mkdir -p "$(dirname "$1")"
 }
