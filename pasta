@@ -116,11 +116,19 @@ pasta_load() {
   local pasta_name
   [[ "$#" -ge 1 ]] && pasta_name="$*" || quit "Usage: $PROGRAM load PASTA_NAME"
   local pasta_type pasta_file output_file
-  create_temp_file output_file
   check_pasta_name "$pasta_name" read pasta_type pasta_file
+  pasta_load_file "$pasta_name" "$pasta_type" "$pasta_file"
+}
+
+pasta_load_file() {
+  local pasta_name="$1"
+  local pasta_type="$2"
+  local pasta_file="$3"
+  create_temp_file output_file
   case "$pasta_type" in
     text) $textcopy "$pasta_file" >"$output_file" 2>&1 ;;
     image) $imgcopy "$pasta_file" >"$output_file" 2>&1 ;;
+    dir) pasta_list_dir "$pasta_file" "$pasta_name" ;;
     *) echoerr "Error: check_pasta_name returned invalid pasta type ${pasta_type}"; exit 1 ;;
   esac
   if grep "Error" "$output_file" >/dev/null
@@ -138,11 +146,47 @@ pasta_show() {
 }
 
 pasta_list() {
-  not_implemented
+  get_pasta_dir
+  local pasta_path="$*"
+  check_pasta_name_safety "$*"
+  local full_path="${PASTA_DIR}/$pasta_path"
+  pasta_list_dir "$full_path" "$pasta_path"
+}
+
+pasta_list_dir() {
+  local full_path="$1"
+  local pasta_name="$2"
+  local pasta_path="$(realpath --relative-to="$PASTA_DIR" "$full_path")"
+  if [[ -d "$full_path" ]]
+  then
+    [[ "$pasta_path" == "." ]] && echo Pasta Store || echo "$pasta_path"
+  else
+    local pasta_type pasta_file
+    if check_name_exists "$pasta_path" check pasta_type pasta_file
+    then
+      [[ "$pasta_type" != "dir" ]] || echoerr "Error: check_name_exists returned dir in pasta_list" && exit 1
+      pasta_load_file "$pasta_path" "$pasta_type" "$pasta_file"
+      return 0
+    else
+      quit "Error: ${pasta_name} does not exist"
+    fi
+  fi
+
+  # Output the tree, removing the root of the tree or the .txt or .png extension but keeping any
+  # colors.  Note: this also removes the extension from directories which
+  # end an extension, which is a bug. One way to possibly fix this is to
+  # detect the color code for directories and check for that, or replace
+  # tree with our own implementation.
+  tree -C --noreport "$full_path" | tail -n +2 | sed -r 's/\.(txt|png)(\x1b\[00m)?$/\2/'
 }
 
 pasta_load_or_list() {
-  [[ "$#" -eq 0 ]] && pasta_list || pasta_load "$@"
+  if [[ "$#" -eq 0 ]]
+  then
+    pasta_list
+  else
+    pasta_load "$@"
+  fi
 }
 
 pasta_find() {
@@ -222,30 +266,38 @@ check_pasta_name_safety() {
 }
 
 # Checks if a pasta already exists by name.
-# Accepts 2 modes: read and write.
-# If read is given, it also takes 2 additional arguments TYPE_VAR and
-# FILE_VAR, which are the names of the variable to assign the type of the
-# pasta and the location of the pasta file
+# Accepts 3 modes: check, read, and write.
+# If read or check is given, it also takes 2 additional arguments TYPE_VAR
+# and FILE_VAR, which are the names of the variable to assign the type of
+# the pasta and the location of the pasta file. Read exits the program if no
+# pasta file exists, while check just returns an error.
 # If write is given, it asks the user if they want to overwrite the existing
 # pasta, deleting it if they choose yes
-# Usage: check_name_exists PASTA_NAME read_or_write [TYPE_VAR] [FILE_VAR]
+# Usage: check_name_exists PASTA_NAME (read|write|check) [TYPE_VAR] [FILE_VAR]
 check_name_exists() {
   local pasta_name="$1"
-  local read_or_write="$2"
+  local operation="$2"
   local pasta_txt_file="${PASTA_DIR}/${pasta_name}.txt"
   local pasta_img_file="${PASTA_DIR}/${pasta_name}.png"
-  case "$read_or_write" in
-    read)
+  local pasta_subdir="${PASTA_DIR}/${pasta_name}"
+  case "$operation" in
+    read|check)
       local type_var="$3"
       local file_var="$4"
       if [[ -f "$pasta_txt_file" ]]
       then
-        read "$type_var" "$file_var" <<< "text ${pasta_txt_file}"
+        read "$type_var" "$file_var" <<< "text $pasta_txt_file"
       elif [[ -f "$pasta_img_file" ]]
       then
-        read "$type_var" "$file_var" <<< "image ${pasta_img_file}"
-      else
+        read "$type_var" "$file_var" <<< "image $pasta_img_file"
+      elif [[ -d "$pasta_subdir" ]]
+      then
+        read "$type_var" "$file_var" <<< "dir $pasta_subdir"
+      elif [[ "$operation" == "read" ]]
+      then
         quit "Error: ${pasta_name} does not exist"
+      else
+        return 1
       fi
       ;;
     write)
@@ -273,7 +325,7 @@ check_pasta_name() {
 
 # Succeeds if the data on the clipboard is an image.
 clipboard_is_image() {
-  [[ "$SYSTEM" =~ ^Linux ]] && xclip -sel clipboard -o -t TARGETS 2>/dev/null | grep image >/dev/null 2>&1
+  [[ "$SYSTEM" =~ ^Linux ]] && [[ "$(xclip -sel clipboard -o -t TARGETS 2>/dev/null)" =~ image ]]
 }
 
 TEMP_FILES=()
@@ -342,6 +394,12 @@ create_pasta_from_file() {
   ensure_parent_dirs "$pasta_file"
   cp "$source_file" "$pasta_file"
   echo "Saved ${file_type} pasta '${pasta_name}'"
+}
+
+# Displays the contents of a pasta.
+# Usage: show_pasta_file PASTA_TYPE PASTA_FILE
+show_pasta_file() {
+  not_implemented
 }
 # END helper functions
 

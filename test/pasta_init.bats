@@ -76,6 +76,8 @@ teardown() {
     "insert ${pasta_name}"
     "file  ${file} ${pasta_name}"
     "load ${pasta_name}"
+    "list"
+    "list ${pasta_name}"
   )
   # Debug output should not be helpful for this test case.
   unset DEBUG

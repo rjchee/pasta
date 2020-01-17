@@ -86,25 +86,25 @@ teardown() {
   run "$PASTA" save ..
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   run "$PASTA" save "../dot dot in front"
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   run "$PASTA" save "dot dot in back/.."
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   run "$PASTA" save "dot dot/../../in middle"
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   CLEANUP=1
@@ -127,7 +127,7 @@ teardown() {
   run "$PASTA" save "$pasta_name"
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'unknown MIME type'
+  [[ "$out" =~ "unknown MIME type" ]]
   check_no_pastas
 
   CLEANUP=1
@@ -346,25 +346,25 @@ teardown() {
   run "$PASTA" insert ..
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   run "$PASTA" insert "../dot dot in front"
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   run "$PASTA" insert "dot dot in back/.."
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   run "$PASTA" insert "dot dot/../../in middle"
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   CLEANUP=1
@@ -446,16 +446,16 @@ teardown() {
   run "$PASTA" file  "$byte_file" bytedata
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'unknown MIME type'
+  [[ "$out" =~ "unknown MIME type" ]]
   check_no_pastas
   CLEANUP=1
 }
 
-@test "pasta file fails when given a non-existent file" {
+@test "pasta file fails when given a nonexistent file" {
   run "$PASTA" file "${TMP_DIR}/fake_file.txt" pasta_name
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'no file' | grep 'exists'
+  [[ "$out" =~ "no file".*"exists" ]]
   check_no_pastas
   CLEANUP=1
 }
@@ -466,7 +466,7 @@ teardown() {
   run "$PASTA" file "${empty_file}" empty_pasta
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is empty'
+  [[ "$out" =~ "is empty" ]]
   check_no_pastas
   CLEANUP=1
 }
@@ -477,7 +477,7 @@ teardown() {
   run "$PASTA" file "$dir_name" pasta_name
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is a directory'
+  [[ "$out" =~ "is a directory" ]]
   check_no_pastas
   CLEANUP=1
 }
@@ -489,25 +489,25 @@ teardown() {
   run "$PASTA" file "$text_file" ..
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   run "$PASTA" file "$text_file" "../dot dot in front"
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   run "$PASTA" file "$text_file" "dot dot in back/.."
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   run "$PASTA" file "$text_file" "dot dot/../../in middle"
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   check_no_pastas
 
   CLEANUP=1
@@ -652,35 +652,34 @@ teardown() {
 }
 
 @test "pasta load rejects sneaky directory traversal names" {
-  cd "$PASTA_DIR"
   run "$PASTA" load ..
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   clipboard_is_empty
 
   sneaky_text_name_1="../dot dot in front"
-  echo "sneaky data 1" > "$(pwd)/${sneaky_text_name_1}.txt"
+  echo "sneaky data 1" > "${PASTA_DIR}/${sneaky_text_name_1}.txt"
   run "$PASTA" "$sneaky_text_name_1"
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   clipboard_is_empty
 
   run "$PASTA" "dot dot in back/.."
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   clipboard_is_empty
 
   inner_dir="dot dot"
-  mkdir "$inner_dir"
+  mkdir "${PASTA_DIR}/$inner_dir"
   sneaky_text_name_2="${inner_dir}/../../in middle"
-  echo "sneaky data 2" > "$(pwd)/${sneaky_text_name_2}.txt"
+  echo "sneaky data 2" > "${PASTA_DIR}/${sneaky_text_name_2}.txt"
   run "$PASTA" load "$sneaky_text_name_2"
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'is an invalid pasta name'
+  [[ "$out" =~ "is an invalid pasta name" ]]
   clipboard_is_empty
 
   CLEANUP=1
@@ -695,12 +694,186 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta load fails when a non-existent pasta is specified" {
-  run "${PASTA}" nonexistent pasta
+@test "pasta load fails when a nonexistent pasta is specified" {
+  run "$PASTA" nonexistent pasta
   [[ "$status" -eq 2 ]]
   clean_output
-  echo "$out" | grep 'does not exist'
+  [[ "$out" =~ "does not exist" ]]
   clipboard_is_empty
+
+  CLEANUP=1
+}
+
+@test "pasta list displays only pastas in the target subtree" {
+  outside_file="${TMP_DIR}/outside.txt"
+  echo outside > "$outside_file"
+  text_pastas=( "top_text" "level1/text file" "level1/level2/my_pasta" "foo/mytxt" "extra extension.txt" )
+  for text_pasta in "${text_pastas[@]}"
+  do
+    text_path="${PASTA_DIR}/${text_pasta}.txt"
+    ensure_parent_dirs "$text_path"
+    echo "$text_pasta" > "$text_path"
+  done
+  image_pastas=( "top_image" "level1/png" "level1/level2/level3/image_pasta" "extra extension.png" "extra_extension_when_image.txt" )
+  for (( i=0 ; i < "${#image_pastas[@]}"; i++ ))
+  do
+    image_path="${PASTA_DIR}/${image_pastas[i]}.png"
+    ensure_parent_dirs "$image_path"
+    create_white_img "$image_path" "$i" "$i"
+  done
+
+  # Test running pasta list on the whole pasta directory.
+  for list_all_cmd in "$PASTA" "$PASTA list" "$PASTA list ." "$PASTA list /" "${PASTA} load ." "${PASTA} load /"
+  do
+    ERROR_MSG="testing list all command '${list_all_cmd}'"
+    run $list_all_cmd
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$(echo "$out" | head -n 1)" == "Pasta Store" ]]
+    base_error_msg="$ERROR_MSG"
+    for text_pasta in "${text_pastas[@]}"
+    do
+      base_name="$(basename "$text_pasta")"
+      ERROR_MSG="when ${base_error_msg}, text pasta '${text_pasta}' did not appear in the results"
+      # Check that the text pasta made it into the output.
+      text_pasta_line="$(echo "$out" | grep "$base_name")"
+      ERROR_MSG="when ${base_error_msg}, the line for text pasta '${text_pasta}' is ${text_pasta_line}"
+      # check that the .txt extension is removed from the output
+      [[ ! "$text_pasta_line" =~ "${base_name}.txt" ]]
+    done
+    for image_pasta in "${image_pastas[@]}"
+    do
+      base_name="$(basename "$image_pasta")"
+      ERROR_MSG="when ${base_error_msg}, image pasta '${image_pasta}' did not appear in the results"
+      # Check that the image pasta made it into the output.
+      image_pasta_line="$(echo "$out" | grep "$base_name")"
+      ERROR_MSG="when ${base_error_msg}, the line for image pasta '${image_pasta}' is ${image_pasta_line}"
+      # Check that the .png extension is removed from the output.
+      [[ ! "$image_pasta_line" =~ "${base_name}.png" ]]
+    done
+  done
+
+  # Test running pasta list on a subdirectory.
+  for list_cmd in "$PASTA" "${PASTA} list" "${PASTA} load"
+  do
+    for subdirectory in "level1" "level1/level2/" "foo/"
+    do
+      ERROR_MSG="testing list command '${list_cmd} ${subdirectory}'"
+      run $list_cmd "${subdirectory}"
+      [[ "$status" -eq 0 ]]
+      clean_output
+      # Check that the first line is the name of the subdirectory without
+      # the trailing slash.
+      [[ "$(echo "$out" | head -n 1)" == "${subdirectory%/}" ]]
+      base_error_msg="$ERROR_MSG"
+      for text_pasta in "${text_pastas[@]}"
+      do
+        base_name="$(basename "$text_pasta")"
+        if [[ "$text_pasta" =~ ^"$subdirectory" ]]
+        then
+          # The pasta should appear in the results.
+          ERROR_MSG="when ${base_error_msg}, text pasta '${text_pasta}' did not appear in the results"
+          # Check that the text pasta made it into the output.
+          text_pasta_line="$(echo "$out" | grep "$base_name")"
+          ERROR_MSG="when ${base_error_msg}, the line for text pasta '${text_pasta}' is ${text_pasta_line}"
+          # check that the .txt extension is removed from the output
+          [[ ! "$text_pasta_line" =~ "${base_name}.txt" ]]
+        else
+          # The pasta should not appear in the results.
+          ERROR_MSG="when ${base_error_msg}, text pasta '${text_pasta}' appeared in the results unexpectedly"
+          [[ ! "$out" =~ "$base_name" ]]
+        fi
+      done
+      for image_pasta in "${image_pastas[@]}"
+      do
+        base_name="$(basename "$image_pasta")"
+        if [[ "$image_pasta" =~ ^"$subdirectory" ]]
+        then
+          # The pasta should appear in the results.
+          ERROR_MSG="when ${base_error_msg}, image pasta '${image_pasta}' did not appear in the results"
+          # Check that the image pasta made it into the output.
+          image_pasta_line="$(echo "$out" | grep "$base_name")"
+          ERROR_MSG="when ${base_error_msg}, the line for image pasta '${image_pasta}' is ${image_pasta_line}"
+          # check that the .txt extension is removed from the output
+          [[ ! "$image_pasta_line" =~ "${base_name}.png" ]]
+        else
+          # The pasta should not appear in the results.
+          ERROR_MSG="when ${base_error_msg}, image pasta '${image_pasta}' appeared in the results unexpectedly"
+          [[ ! "$out" =~ "$base_name" ]]
+        fi
+      done
+    done
+  done
+
+  CLEANUP=1
+}
+
+@test "pasta list rejects sneaky directory traversal names" {
+  run "$PASTA" list ..
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "is an invalid pasta name" ]]
+  clipboard_is_empty
+
+  pasta_name="pasta_file"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo something > "$pasta_file"
+  sneaky_text_name_1="../dot dot in front"
+  mkdir "${PASTA_DIR}/${sneaky_text_name_1}"
+  run "$PASTA" list "$sneaky_text_name_1"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "is an invalid pasta name" ]]
+  [[ ! "$out" =~ "$pasta_name" ]]
+
+  pasta_subdir_name="dot dot in back"
+  pasta_subdir="${PASTA_DIR}/$pasta_subdir_name"
+  mkdir "$pasta_subdir"
+  echo something else > "${pasta_subdir}/${pasta_name}.txt"
+  run "$PASTA" list "${pasta_subdir_name}/.."
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "is an invalid pasta name" ]]
+  [[ ! "$out" =~ "$pasta_name" ]]
+
+  sneaky_text_name_2="${pasta_subdir_name}/../../pastas"
+  run "$PASTA" list "$sneaky_text_name_2"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "is an invalid pasta name" ]]
+  [[ ! "$out" =~ "$pasta_name" ]]
+
+  CLEANUP=1
+}
+
+@test "pasta list fails when a nonexistent directory is specified" {
+  nonexistent_name="nonexistent"
+  run "$PASTA" list "$nonexistent_name"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "does not exist" ]]
+  [[ "$out" =~ "$nonexistent_name" ]]
+
+  CLEANUP=1
+}
+
+@test "pasta list only strips file extensions from files and not directories" {
+  CLEANUP=1
+  skip "This functionality is not implemented yet"
+
+  text_dir="dir.txt"
+  text_path="${PASTA_DIR}/$text_dir"
+  mkdir "$text_path"
+  echo abc > "${text_path}/_.txt"
+  image_dir="dir.png"
+  image_path="${PASTA_DIR}/$image_dir"
+  mkdir "$image_path"
+  echo abc > "${image_path}/ignored.txt"
+  run "$PASTA"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ "$text_dir" ]]
+  [[ "$out" =~ "$image_dir" ]]
 
   CLEANUP=1
 }
