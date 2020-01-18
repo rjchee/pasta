@@ -117,7 +117,6 @@ teardown() {
   clean_output
   [[ "$out" =~ "unknown MIME type" ]]
   check_no_pastas
-
   CLEANUP=1
 }
 
@@ -210,7 +209,6 @@ teardown() {
   [[ -f "$text_file" ]]
   [[ ! -f "$image_file" ]]
   [[ "$text1" == "$(< "$text_file")" ]]
-
   CLEANUP=1
 }
 
@@ -269,7 +267,6 @@ teardown() {
   [[ -f "$text_file" ]]
   [[ ! -f "$image_file" ]]
   diff -q "$text_file" "$PASTA_SETTINGS"
-
   CLEANUP=1
 }
 
@@ -335,6 +332,7 @@ teardown() {
     [[ ! -f "${PASTA_DIR}/${sneaky_name}.txt" ]]
     check_no_pastas
   done
+  CLEANUP=1
 }
 
 @test "pasta file saves a text file" {
@@ -464,7 +462,6 @@ teardown() {
     [[ ! -f "${PASTA_DIR}/${sneaky_name}.txt" ]]
     check_no_pastas
   done
-
   CLEANUP=1
 }
 
@@ -545,7 +542,6 @@ teardown() {
   [[ -f "$text_pasta" ]]
   [[ ! -f "$image_pasta" ]]
   diff "$text_pasta" "$new_text"
-
   CLEANUP=1
 }
 
@@ -563,7 +559,6 @@ teardown() {
     $paste_text >"$pasted_file"
     diff "$text_file" "$pasted_file"
   done
-
   CLEANUP=1
 }
 
@@ -581,7 +576,6 @@ teardown() {
     $paste_text >"$pasted_file"
     diff "$image_file" "$pasted_file"
   done
-
   CLEANUP=1
 }
 
@@ -606,7 +600,6 @@ teardown() {
     $paste_text >"$pasted_file"
     diff "$text_file" "$pasted_file"
   done
-
   CLEANUP=1
 }
 
@@ -621,7 +614,6 @@ teardown() {
   pasted_file="${TMP_DIR}/pasted.txt"
   $paste_text >"$pasted_file"
   diff "$text_file" "$pasted_file"
-
   CLEANUP=1
 }
 
@@ -640,7 +632,6 @@ teardown() {
       clipboard_is_empty
     done
   done
-
   CLEANUP=1
 }
 
@@ -654,7 +645,6 @@ teardown() {
     [[ "$out" =~ "does not exist" ]]
     clipboard_is_empty
   done
-
   CLEANUP=1
 }
 
@@ -672,7 +662,6 @@ teardown() {
     clean_output
     [[ "$out" == "$text_data" ]]
   done
-
   CLEANUP=1
 }
 
@@ -691,7 +680,6 @@ teardown() {
     mock_called "$img_open_cmd" image_file
     [[ "$image_file" -ef "$pasta_file" ]]
   done
-
   CLEANUP=1
 }
 
@@ -711,6 +699,7 @@ teardown() {
     clean_output
     [[ "$out" == "$text_data" ]]
   done
+  CLEANUP=1
 }
 
 @test "pasta show accepts names with slashes and spaces" {
@@ -728,7 +717,6 @@ teardown() {
     clean_output
     [[ "$out" == "$text_data" ]]
   done
-
   CLEANUP=1
 }
 
@@ -746,7 +734,6 @@ teardown() {
       [[ "$out" =~ "is an invalid pasta name" ]]
     done
   done
-
   CLEANUP=1
 }
 
@@ -759,6 +746,7 @@ teardown() {
     clean_output
     [[ "$out" =~ "does not exist" ]]
   done
+  CLEANUP=1
 }
 
 @test "pasta list displays only pastas in the target subtree" {
@@ -862,7 +850,6 @@ teardown() {
       done
     done
   done
-
   CLEANUP=1
 }
 
@@ -885,6 +872,7 @@ teardown() {
     [[ ! "$out" =~ ^"Loaded" ]]
     clipboard_is_empty
   done
+  CLEANUP=1
 }
 
 @test "pasta list rejects sneaky directory traversal names" {
@@ -902,7 +890,6 @@ teardown() {
       [[ ! "$out" =~ "$pasta_name" ]]
     done
   done
-
   CLEANUP=1
 }
 
@@ -917,7 +904,6 @@ teardown() {
     [[ "$out" =~ "does not exist" ]]
     [[ "$out" =~ "$nonexistent_name" ]]
   done
-
   CLEANUP=1
 }
 
@@ -942,6 +928,5 @@ teardown() {
     [[ "$out" =~ "$text_dir" ]]
     [[ "$out" =~ "$image_dir" ]]
   done
-
   CLEANUP=1
 }

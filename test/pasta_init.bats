@@ -67,27 +67,36 @@ teardown() {
 }
 
 @test "pasta functions should fail when not initialized" {
-  prefix="Pasta has not been initialized."
+  output_prefix="Pasta has not been initialized."
   pasta_name="name"
   file="${HOME}/text.txt"
   echo "text data" >"$file"
   commands=(
     "save ${pasta_name}"
     "insert ${pasta_name}"
-    "file  ${file} ${pasta_name}"
+    "file ${file} ${pasta_name}"
+    ""
+    "${pasta_name}"
+    "load"
     "load ${pasta_name}"
     "list"
     "list ${pasta_name}"
+    "ls"
+    "ls ${pasta_name}"
+    "show"
+    "show ${pasta_name}"
+    "inspect"
+    "inspect ${pasta_name}"
   )
   # Debug output should not be helpful for this test case.
   unset DEBUG
   for cmd in "${commands[@]}"
   do
-    ERROR_MSG="Failed with command '$(echo "$cmd" | cut -d' ' -f1)'"
+    ERROR_MSG="Failed with command 'pasta ${cmd}'"
     run "$PASTA" $cmd
     [[ "$status" -eq 2 ]]
     clean_output
-    [[ "$out" =~ ^"$prefix" ]]
+    [[ "$out" =~ ^"$output_prefix" ]]
   done
   CLEANUP=1
 }
