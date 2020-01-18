@@ -113,9 +113,13 @@ pasta_file() {
 }
 
 pasta_load() {
-  local pasta_name
-  [[ "$#" -ge 1 ]] && pasta_name="$*" || quit "Usage: $PROGRAM load PASTA_NAME"
-  local pasta_type pasta_file output_file
+  if [[ "$#" -eq 0 ]]
+  then
+    pasta_list
+    return 0
+  fi
+  local pasta_name="$*"
+  local pasta_type pasta_file
   check_pasta_name "$pasta_name" read pasta_type pasta_file
   pasta_load_file "$pasta_name" "$pasta_type" "$pasta_file"
 }
@@ -124,17 +128,13 @@ pasta_load_file() {
   local pasta_name="$1"
   local pasta_type="$2"
   local pasta_file="$3"
-  create_temp_file output_file
   case "$pasta_type" in
-    text) $textcopy "$pasta_file" >"$output_file" 2>&1 ;;
-    image) $imgcopy "$pasta_file" >"$output_file" 2>&1 ;;
-    dir) pasta_list_dir "$pasta_file" "$pasta_name" ;;
+    dir) pasta_list_dir "$pasta_file" "$pasta_name"; return 0 ;;
+    text) $textcopy "$pasta_file" >/dev/null 2>&1 ;;
+    image) $imgcopy "$pasta_file" >/dev/null 2>&1 ;;
     *) echoerr "Error: check_pasta_name returned invalid pasta type ${pasta_type}"; exit 1 ;;
   esac
-  if grep "Error" "$output_file" >/dev/null
-  then
-    quit "$(< "$output_file")"
-  fi
+  echo "Loaded ${pasta_type} pasta '${pasta_name}' to the clipboard."
 }
 
 pasta_pastefile() {
@@ -142,7 +142,19 @@ pasta_pastefile() {
 }
 
 pasta_show() {
-  not_implemented
+  if [[ "$#" -eq 0 ]]
+  then
+    pasta_list
+    return 0
+  fi
+  local pasta_name="$*"
+  local pasta_type pasta_file
+  check_pasta_name "$pasta_name" read pasta_type pasta_file
+  case "$pasta_type" in
+    dir) pasta_list_dir "$pasta_file" "$pasta_name" ;;
+    text) cat "$pasta_file" ;;
+    image) $imgshow "$pasta_file" ;;
+  esac
 }
 
 pasta_list() {
@@ -178,15 +190,6 @@ pasta_list_dir() {
   # detect the color code for directories and check for that, or replace
   # tree with our own implementation.
   tree -C --noreport "$full_path" | tail -n +2 | sed -r 's/\.(txt|png)(\x1b\[00m)?$/\2/'
-}
-
-pasta_load_or_list() {
-  if [[ "$#" -eq 0 ]]
-  then
-    pasta_list
-  else
-    pasta_load "$@"
-  fi
 }
 
 pasta_find() {
@@ -412,6 +415,7 @@ case "$SYSTEM" in
     # Png data seems to work best for pasting into browsers.
     imgcopy="xclip -selection clipboard -t image/png -i"
     imgpaste="xclip -selection clipboard -t image/png -o"
+    imgshow="xdg-open"
     ;;
   Darwin*)
     which pbcopy >/dev/null || which pbpaste >/dev/null || quit "Could not find clipboard provider on this system"
@@ -419,6 +423,7 @@ case "$SYSTEM" in
     textpaste="pbpaste"
     imgcopy="quit 'Copying and pasting images is unsupported in MacOS at the moment'"
     imgpaste="quit 'Copying and pasting images is unsupported in MacOS at the moment'"
+    imgshow="open"
     ;;
   *)
     quit "pasta is not supported on this system."
@@ -435,7 +440,7 @@ case "$COMMAND" in
   file) shift; pasta_file "$@" ;;
   load) shift; pasta_load "$@" ;;
   paste) shift; pasta_pastefile "$@" ;;
-  inspect|show) shift; pasta_show "$@" ;;
+  show|inspect) shift; pasta_show "$@" ;;
   list|ls) shift; pasta_list "$@" ;;
   find|search) shift; pasta_find "$@" ;;
   grep) shift; pasta_grep "$@" ;;
@@ -445,6 +450,6 @@ case "$COMMAND" in
   edit) shift; pasta_edit "$@" ;;
   help|--help|usage) shift; pasta_usage ;;
   version|--version) shift; pasta_version ;;
-  *) pasta_load_or_list "$@" ;;
+  *) pasta_load "$@" ;;
 esac
 exit 0
