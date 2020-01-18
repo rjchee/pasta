@@ -21,12 +21,12 @@ setup() {
 teardown() {
   if [[ "$CLEANUP" -eq 0 ]]
   then
+    echo "# test case run in ${TMP_DIR}" >&3
     echo "$output" > "${TMP_DIR}/run_output.txt"
     if [[ -n "${ERROR_MSG:+x}" ]]
     then
-      echo "# ${ERROR_MSG}"
+      echo "# ${ERROR_MSG}" >&3
     fi
-    echo "# test case run in ${TMP_DIR}"
   else
     rm -rf "$TMP_DIR"
     $clear_clip

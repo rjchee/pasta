@@ -14,12 +14,12 @@ setup() {
 teardown() {
   if [[ "$CLEANUP" -eq 0 ]]
   then
+    echo "# test case run in ${HOME}" >&3
     echo "$output" > "${HOME}/run_output.txt"
     if [[ -n "${ERROR_MSG:+x}" ]]
     then
-      echo "# ${ERROR_MSG}"
+      echo "# ${ERROR_MSG}" >&3
     fi
-    echo "# test case run in ${HOME}"
   else
     rm -rf "$HOME"
   fi
