@@ -121,11 +121,15 @@ teardown() {
 }
 
 @test "pasta save fails with no arguments" {
-  run "$PASTA" save
-  [[ "$status" -eq 2 ]]
-  clean_output
-  [[ "$out" =~ "Usage: " ]]
-  check_no_pastas
+  for force_flag in "" "-f" "--force"
+  do
+    ERROR_MSG="testing 'pasta save ${force_flag}'"
+    run "$PASTA" save $force_flag
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "Usage: " ]]
+    check_no_pastas
+  done
   CLEANUP=1
 }
 
@@ -212,6 +216,25 @@ teardown() {
   CLEANUP=1
 }
 
+@test "pasta save with the force flag doesn't ask for overwrite" {
+  old_data="old data"
+  pasta_name="pasta_name"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  new_data="new data"
+  for force_flag in '-f' '--force'
+  do
+    echo "$old_data" > "$pasta_file"
+    argcopy "$new_data"
+    # Echo no to pasta which should be ignored.
+    run bash -c "echo n | ${PASTA} save ${force_flag} $pasta_name"
+    [[ "$status" -eq 0 ]]
+    [[ -f "$pasta_file" ]]
+    [[ "$new_data" == "$(< "$pasta_file")" ]]
+    rm "$pasta_file"
+  done
+  CLEANUP=1
+}
+
 @test "pasta insert calls the editor" {
   # Replace the default editor with cp to simulate writing something to the file.
   export EDITOR="cp ${PASTA_SETTINGS}"
@@ -220,6 +243,7 @@ teardown() {
   [[ "$status" -eq 0 ]]
   pasta_file="${PASTA_DIR}/${pasta_name}.txt"
   [[ -f "$pasta_file" ]]
+  diff -q "$pasta_file" "$PASTA_SETTINGS"
   CLEANUP=1
 }
 
@@ -270,6 +294,23 @@ teardown() {
   CLEANUP=1
 }
 
+@test "pasta insert with the force flag doesn't ask for overwrite" {
+  pasta_name="pasta_name"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  export EDITOR="cp ${PASTA_SETTINGS}"
+  for force_flag in '-f' '--force'
+  do
+    echo "different from pasta settings" > "$pasta_file"
+    # Echo no to pasta which should be ignored.
+    run bash -c "echo n | ${PASTA} insert ${force_flag} $pasta_name"
+    [[ "$status" -eq 0 ]]
+    [[ -f "$pasta_file" ]]
+    diff -q "$pasta_file" "$PASTA_SETTINGS"
+    rm "$pasta_file"
+  done
+  CLEANUP=1
+}
+
 @test "pasta insert without writing anything should fail" {
   # Replace the default editor with true to simulate a no-op.
   export EDITOR=true
@@ -281,14 +322,18 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta insert with no arguments should fail" {
+@test "pasta insert fails with no arguments" {
   # Replace the default editor with cp to simulate writing something to the file.
   export EDITOR="cp ${PASTA_SETTINGS}"
-  run "$PASTA" insert
-  [[ "$status" -eq 2 ]]
-  clean_output
-  [[ "$out" =~ ^"Usage: " ]]
-  check_no_pastas
+  for force_flag in "" "-f" "--force"
+  do
+    ERROR_MSG="testing 'pasta insert $force_flag'"
+    run "$PASTA" insert $force_flag
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ ^"Usage: " ]]
+    check_no_pastas
+  done
   CLEANUP=1
 }
 
@@ -367,6 +412,7 @@ teardown() {
   [[ "$status" -eq 0 ]]
   pasta_file="${PASTA_DIR}/${pasta_name}.png"
   [[ -f "$pasta_file" ]]
+  [[ "$(file --mime-type -b "$pasta_file")" == "image/png" ]]
   imgdiff "$image_file" "$pasta_file"
   CLEANUP=1
 }
@@ -386,18 +432,19 @@ teardown() {
 @test "pasta file fails when given too few arguments" {
   text_file="${TMP_DIR}/textfile.txt"
   echo "text data" >"$text_file"
-  # Check when no pasta name is given.
-  run "$PASTA" file "$text_file"
-  [[ "$status" -eq 2 ]]
-  clean_output
-  [[ "$out" =~ "Usage: " ]]
-  check_no_pastas
-  # Check when 0 arguments are given.
-  run "$PASTA" file
-  [[ "$status" -eq 2 ]]
-  clean_output
-  [[ "$out" =~ "Usage: " ]]
-  check_no_pastas
+  for force_flag in "" "-f" "--force"
+  do
+    for text_file in "" "$text_file"
+    do
+      ERROR_MSG="testing 'pasta file ${force_flag} ${text_file}'"
+      # Check when no pasta name is given.
+      run "$PASTA" file $force_flag $text_file
+      [[ "$status" -eq 2 ]]
+      clean_output
+      [[ "$out" =~ "Usage: " ]]
+      check_no_pastas
+    done
+  done
   CLEANUP=1
 }
 
@@ -542,6 +589,24 @@ teardown() {
   [[ -f "$text_pasta" ]]
   [[ ! -f "$image_pasta" ]]
   diff "$text_pasta" "$new_text"
+  CLEANUP=1
+}
+
+@test "pasta file with the force flag doesn't ask for overwrite" {
+  text_file="${TMP_DIR}/textfile.txt"
+  echo "new data" > "$text_file"
+  pasta_name="pasta_name"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  for force_flag in '-f' '--force'
+  do
+    echo "old data" > "$pasta_file"
+    # Echo no to pasta which should be ignored.
+    run bash -c "echo n | ${PASTA} file ${force_flag} ${text_file} $pasta_name"
+    [[ "$status" -eq 0 ]]
+    [[ -f "$pasta_file" ]]
+    diff "$pasta_file" "$text_file"
+    rm "$pasta_file"
+  done
   CLEANUP=1
 }
 

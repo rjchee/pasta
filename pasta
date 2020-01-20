@@ -23,15 +23,15 @@ pasta_usage() {
     $PROGRAM init [DIRECTORY]
         Initialize the copypasta storage.
         If DIRECTORY is not provided, it will be initialized to ~/.pastas.
-    $PROGRAM save PASTA_NAME
+    $PROGRAM save [--force,-f] PASTA_NAME
         Save the data on the clipboard as PASTA_NAME.
-    $PROGRAM insert PASTA_NAME
+    $PROGRAM insert [--force,-f] PASTA_NAME
         Open a text editor to write a copypasta.
-    $PROGRAM file FILE PASTA_NAME
+    $PROGRAM file [--force,-f] FILE PASTA_NAME
         Save the file as PASTA_NAME.
     $PROGRAM [load] PASTA_NAME
         Place the existing copypasta on the clipboard.
-    $PROGRAM paste PASTA_NAME FILE
+    $PROGRAM paste [--force,-f] PASTA_NAME FILE
         Paste the copypasta to a file.
     $PROGRAM inspect|show PASTA_NAME
         Show the copypasta.
@@ -47,7 +47,7 @@ pasta_usage() {
         Create a copy of PASTA_1 named PASTA_2.
     $PROGRAM rename|mv [--force,-f] PASTA_1 PASTA_2
         Rename PASTA_1 to PASTA_2
-    $PROGRAM delete|remove|rm [--recursive,-r] [--force,-f] PASTA_NAME
+    $PROGRAM delete|remove|rm [--recursive,-r] PASTA_NAME
         Delete the copypasta.
     $PROGRAM edit PASTA_NAME
         Edit the copypasta.
@@ -72,9 +72,14 @@ pasta_init() {
 }
 
 pasta_save() {
-  local pasta_name
-  [[ "$#" -ge 1 ]] && pasta_name="$*" || quit "Usage: $PROGRAM save PASTA_NAME"
-  check_pasta_name "$pasta_name" write
+  local force=""
+  case "${1:-}" in
+    -f|--force) shift; force="force" ;;
+    --) shift ;;
+  esac
+  [[ "$#" -ge 1 ]] || quit "Usage: $PROGRAM save [--force,-f] PASTA_NAME"
+  local pasta_name="$*"
+  check_pasta_name "$pasta_name" write $force
   local temp_file
   create_temp_file temp_file
   [[ -f "$temp_file" ]]
@@ -89,9 +94,14 @@ pasta_save() {
 }
 
 pasta_insert() {
-  local pasta_name
-  [[ "$#" -ge 1 ]] && pasta_name="$*" || quit "Usage: $PROGRAM insert PASTA_NAME"
-  check_pasta_name "$pasta_name" write
+  local force=""
+  case "${1:-}" in
+    -f|--force) shift; force="force" ;;
+    --) shift ;;
+  esac
+  [[ "$#" -ge 1 ]] || quit "Usage: $PROGRAM insert [--force,-f] PASTA_NAME"
+  local pasta_name="$*"
+  check_pasta_name "$pasta_name" write $force
   local temp_file
   create_temp_file temp_file
   # Remove the temporary file to detect a difference between exiting the
@@ -103,10 +113,16 @@ pasta_insert() {
 }
 
 pasta_file() {
-  local file pasta_name
-  [[ $# -ge 2 ]] && file="$1" && pasta_name="${*:2}" || quit "Usage: $PROGRAM file FILE PASTA_NAME"
+  local force=""
+  case "${1:-}" in
+    -f|--force) shift; force="force" ;;
+    --) shift ;;
+  esac
+  [[ $# -ge 2 ]] || quit "Usage: $PROGRAM file [--force,-f] FILE PASTA_NAME"
+  local file="$1"
+  local pasta_name="${*:2}"
   [[ -f "$file" ]] || { [[ -d "$file" ]] && quit "Error: ${file} is a directory"; } || quit "Error: no file '${file}' exists"
-  check_pasta_name "$pasta_name" write
+  check_pasta_name "$pasta_name" write $force
   local mimetype="$(file --mime-type -b "$file")"
   local ftype="$(cut -d'/' -f1 <<< "$mimetype")"
   create_pasta_from_file "$file" "$ftype" "$pasta_name" "$mimetype"
@@ -275,8 +291,9 @@ check_pasta_name_safety() {
 # the pasta and the location of the pasta file. Read exits the program if no
 # pasta file exists, while check just returns an error.
 # If write is given, it asks the user if they want to overwrite the existing
-# pasta, deleting it if they choose yes
-# Usage: check_name_exists PASTA_NAME (read|write|check) [TYPE_VAR] [FILE_VAR]
+# pasta, deleting it if they choose yes. However, if the "force" argument is
+# given, the answer is assumed to be yes.
+# Usage: check_name_exists PASTA_NAME (read|write|check) [ARGS...]
 check_name_exists() {
   local pasta_name="$1"
   local operation="$2"
@@ -306,7 +323,8 @@ check_name_exists() {
     write)
       if [[ -f "$pasta_txt_file" ]] || [[ -f "$pasta_img_file" ]]
       then
-        yesno "${pasta_name} already exists. Overwrite it?"
+        local force="${3:-}"
+        [[ "$force" == "force" ]] || yesno "${pasta_name} already exists. Overwrite it?"
         rm -f "$pasta_txt_file" "$pasta_img_file"
       fi
       ;;
@@ -318,7 +336,7 @@ check_name_exists() {
 }
 
 # Boilerplate to verify that a pasta name is valid.
-# Usage: check_pasta_name PASTA_NAME read_or_write
+# Usage: check_pasta_name PASTA_NAME read_or_write OPTIONS
 check_pasta_name() {
   local pasta_name="$1"
   get_pasta_dir
