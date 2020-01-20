@@ -127,13 +127,13 @@ teardown() {
     run "$PASTA" save $force_flag
     [[ "$status" -eq 2 ]]
     clean_output
-    [[ "$out" =~ "Usage: " ]]
+    [[ "$out" =~ ^"Usage: " ]]
     check_no_pastas
   done
   CLEANUP=1
 }
 
-@test "pasta save works as expected when overwriting" {
+@test "pasta save works when overwriting" {
   text1="first text data"
   argcopy "$text1"
   pasta_name="overwritten_pasta"
@@ -441,7 +441,7 @@ teardown() {
       run "$PASTA" file $force_flag $text_file
       [[ "$status" -eq 2 ]]
       clean_output
-      [[ "$out" =~ "Usage: " ]]
+      [[ "$out" =~ ^"Usage: " ]]
       check_no_pastas
     done
   done
@@ -992,6 +992,619 @@ teardown() {
     clean_output
     [[ "$out" =~ "$text_dir" ]]
     [[ "$out" =~ "$image_dir" ]]
+  done
+  CLEANUP=1
+}
+
+@test "pasta cp copies a text pasta to the given location" {
+  source_name="text_pasta"
+  source_file="${PASTA_DIR}/${source_name}.txt"
+  echo "text data" > "$source_file"
+  dest_name="destination"
+  run "$PASTA" cp "$source_name" "$dest_name"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Text pasta" ]]
+  dest_file="${PASTA_DIR}/${dest_name}.txt"
+  [[ -f "$dest_file" ]]
+  diff "$source_file" "$dest_file"
+  CLEANUP=1
+}
+
+@test "pasta cp copies an image pasta to the given location" {
+  source_name="image_pasta"
+  source_file="${PASTA_DIR}/${source_name}.png"
+  create_white_img "$source_file"
+  dest_name="destination"
+  run "$PASTA" cp "$source_name" "$dest_name"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Image pasta" ]]
+  dest_file="${PASTA_DIR}/${dest_name}.png"
+  [[ -f "$dest_file" ]]
+  diff "$source_file" "$dest_file"
+  CLEANUP=1
+}
+
+@test "pasta cp accepts names with slashes and spaces" {
+  source_name="source/text pasta"
+  source_file="${PASTA_DIR}/${source_name}.txt"
+  ensure_parent_dirs "$source_file"
+  echo "text data" > "$source_file"
+  dest_name="destination/text pasta"
+  run "$PASTA" cp "$source_name" $dest_name
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Text pasta" ]]
+  dest_file="${PASTA_DIR}/${dest_name}.txt"
+  [[ -f "$dest_file" ]]
+  diff "$source_file" "$dest_file"
+  CLEANUP=1
+}
+
+@test "pasta cp copies to the destination directory" {
+  source_name="text_pasta"
+  source_file="${PASTA_DIR}/${source_name}.txt"
+  echo "text data" > "$source_file"
+  dest_name="directory"
+  dummy_path="${PASTA_DIR}/${dest_name}/file.txt"
+  ensure_parent_dirs "$dummy_path"
+  echo "dummy data" > "$dummy_path"
+  run "$PASTA" cp "$source_name" "$dest_name"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Text pasta" ]]
+  dest_file="${PASTA_DIR}/${dest_name}/${source_name}.txt"
+  [[ -f "$dest_file" ]]
+  diff "$source_file" "$dest_file"
+  CLEANUP=1
+}
+
+@test "pasta cp does not overwrite data when the source is a directory" {
+  source_name="my_dir"
+  source_dir="${PASTA_DIR}/${source_name}"
+  mkdir "$source_dir"
+  inner_name="foobar"
+  inner_file="${source_dir}/${inner_name}.txt"
+  echo "some data" > "$inner_file"
+  dest_name="my_destination"
+  text_file="${PASTA_DIR}/${dest_name}.txt"
+  echo "more data" > "$text_file"
+  text_backup="${TMP_DIR}/backup.txt"
+  cp "$text_file" "$text_backup"
+  for recurse_flag in "-r" "--recursive"
+  do
+    # Echo no to pasta which should be ignored.
+    run bash -c "echo n | ${PASTA} cp ${recurse_flag} ${source_name} ${dest_name}"
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$out" =~ ^Directory ]]
+    # Check that the new data was copied over.
+    dest_file="${PASTA_DIR}/${dest_name}/${inner_name}.txt"
+    [[ -f "$dest_file" ]]
+    diff "$dest_file" "$inner_file"
+    # Check that the existing text file was not changed.
+    [[ -f "$text_file" ]]
+    diff "$text_file" "$text_backup"
+    rm -r "${PASTA_DIR}/${dest_name}"
+  done
+  CLEANUP=1
+}
+
+@test "pasta cp fails when copying a directory without the recursive flag" {
+  dir_name="dir"
+  dir_file="${PASTA_DIR}/${dir_name}/file.txt"
+  ensure_parent_dirs "$dir_file"
+  echo "data" > "$dir_file"
+  dest_name="destination"
+  run "$PASTA" cp "$dir_name" "$dest_name"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "is a directory. Please use the --recursive flag"$ ]]
+  [[ ! -e "${PASTA_DIR}/${dest_name}" ]]
+  CLEANUP=1
+}
+
+@test "pasta cp rejects sneaky directory traversal names" {
+  setup_sneaky_paths_test write
+  pasta_name="text_pasta"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  for sneaky_name in "${sneaky_names[@]}"
+  do
+    echo "text data" > "$pasta_file"
+    ERROR_MSG="testing pasta cp when destination is sneaky path '${sneaky_name}'"
+    run "$PASTA" cp "$pasta_name" "$sneaky_name"
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "is an invalid pasta name" ]]
+    [[ ! -f "${PASTA_DIR}/${sneaky_name}.txt" ]]
+    rm "$pasta_file"
+    check_no_pastas
+  done
+  setup_sneaky_paths_test read
+  for sneaky_name in "${sneaky_names[@]}"
+  do
+    ERROR_MSG="testing pasta cp when source is sneaky path '${sneaky_name}'"
+    run "$PASTA" cp "$sneaky_name" "$pasta_name"
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "is an invalid pasta name" ]]
+    [[ ! -f "$pasta_file" ]]
+  done
+  CLEANUP=1
+}
+
+@test "pasta cp fails when given too few arguments" {
+  source_name="source_name"
+  echo data > "${PASTA_DIR}/${source_name}.txt"
+  for flags in "" "-f" "--force" "-r" "--recursive" "-v" "--verbose" "-f -r" "--recursive -v -f --"
+  do
+    for pos_arg in "" "$source_name"
+    do
+      ERROR_MSG="testing 'pasta cp ${flags} ${pos_arg}'"
+      run "$PASTA" cp $flags $pos_arg
+      [[ "$status" -eq 2 ]]
+      clean_output
+      [[ "$out" =~ ^"Usage: " ]]
+    done
+  done
+  CLEANUP=1
+}
+
+@test "pasta cp fails when a nonexistent source pasta is specified" {
+  run "$PASTA" cp nonexistent destination
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "does not exist" ]]
+  CLEANUP=1
+}
+
+@test "pasta cp fails when the source is the destination" {
+  pasta_name="same_pasta"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  pasta_data="data"
+  echo "$pasta_data" > "${PASTA_DIR}/${pasta_name}.txt"
+  run "$PASTA" cp "$pasta_name" "$pasta_name"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "are the same pasta"$ ]]
+  [[ -f "$pasta_file" ]]
+  [[ "$pasta_data" == "$(< "$pasta_file")" ]]
+
+  dir_name="my_dir"
+  pasta_dir="${PASTA_DIR}/${dir_name}"
+  mkdir "$pasta_dir"
+  inner_file="${pasta_dir}/something.txt"
+  inner_data="something"
+  echo "$inner_data" > "$inner_file"
+  run "$PASTA" cp --recursive "$dir_name" "$dir_name"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ ^"Error: cannot cp directory" ]]
+  [[ -f "$inner_file" ]]
+  [[ "$inner_data" == "$(< "$inner_file")" ]]
+  CLEANUP=1
+}
+
+@test "pasta cp works when overwriting" {
+  source_text="source_text"
+  source_text_file="${PASTA_DIR}/${source_text}.txt"
+  echo data > "$source_text_file"
+  source_img="source_img"
+  source_img_file="${PASTA_DIR}/${source_img}.png"
+  source_img2="source_img_2"
+  source_img2_file="${PASTA_DIR}/${source_img2}.png"
+  create_white_img "$source_img_file" 32 32
+  create_white_img "$source_img2_file" 36 36
+
+  overwritten_name="overwritten_pasta"
+  overwritten_text="${PASTA_DIR}/${overwritten_name}.txt"
+  overwritten_img="${PASTA_DIR}/${overwritten_name}.png"
+  echo "different data" > "$overwritten_text"
+  overwritten_backup="${TMP_DIR}/backup.txt"
+  cp "$overwritten_text" "$overwritten_backup"
+
+  # Test overwriting text with text.
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} cp ${source_text} ${overwritten_name}"
+  [[ "$status" -eq 3 ]]
+  # Data should be the same.
+  [[ -f "$overwritten_text" ]]
+  diff "$overwritten_text" "$overwritten_backup"
+  # Check behavior when yes is given.
+  run bash -c "echo y | ${PASTA} cp ${source_text} ${overwritten_name}"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ -f "$overwritten_text" ]]
+  diff "$overwritten_text" "$source_text_file"
+
+  # Test overwriting text with image.
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} cp ${source_img} ${overwritten_name}"
+  # User rejected overwriting, so data should still be text.
+  [[ "$status" -eq 3 ]]
+  # Data should be the same.
+  [[ -f "$overwritten_text" ]]
+  [[ ! -f "$overwritten_img" ]]
+  diff "$overwritten_text" "$source_text_file"
+  # Check behavior when yes is given.
+  run bash -c "echo y | ${PASTA} cp ${source_img} ${overwritten_name}"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ -f "$overwritten_img" ]]
+  [[ ! -f "$overwritten_text" ]]
+  diff "$overwritten_img" "$source_img_file"
+
+  # Test overwriting image with image.
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} cp ${source_img2} ${overwritten_name}"
+  # User rejected overwriting, so data should still be the same.
+  [[ "$status" -eq 3 ]]
+  # Data should be the same.
+  [[ -f "$overwritten_img" ]]
+  diff "$overwritten_img" "$source_img_file"
+  # Check behavior when yes is given.
+  run bash -c "echo y | ${PASTA} cp ${source_img2} ${overwritten_name}"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ -f "$overwritten_img" ]]
+  diff "$overwritten_img" "$source_img2_file"
+
+  # Test overwriting image with text.
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} cp ${source_text} ${overwritten_name}"
+  # User rejected overwriting, so data should still be image.
+  [[ "$status" -eq 3 ]]
+  # data Should be the same.
+  [[ -f "$overwritten_img" ]]
+  [[ ! -f "$overwritten_text" ]]
+  diff "$overwritten_img" "$source_img2_file"
+  # Check behavior when yes is given.
+  run bash -c "echo y | ${PASTA} cp ${source_text} ${overwritten_name}"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ -f "$overwritten_text" ]]
+  [[ ! -f "$overwritten_img" ]]
+  diff "$overwritten_text" "$source_text_file"
+  CLEANUP=1
+}
+
+@test "pasta cp with the force flag doesn't ask for overwrite" {
+  source_name="textfile"
+  source_file="${PASTA_DIR}/${source_name}.txt"
+  echo "new data" > "$source_file"
+  dest_name="dest_name"
+  dest_file="${PASTA_DIR}/${dest_name}.txt"
+  for force_flag in '-f' '--force'
+  do
+    ERROR_MSG="testing 'pasta cp ${force_flag}'"
+    echo "old data" > "$dest_file"
+    # Echo no to pasta which should be ignored.
+    run bash -c "echo n | ${PASTA} cp ${force_flag} ${source_name} $dest_name"
+    [[ "$status" -eq 0 ]]
+    [[ -f "$dest_file" ]]
+    diff "$dest_file" "$source_file"
+    rm "$dest_file"
+  done
+  CLEANUP=1
+}
+
+@test "pasta mv renames a text pasta to the given location" {
+  source_name="text_pasta"
+  source_file="${PASTA_DIR}/${source_name}.txt"
+  source_data="text data"
+  dest_name="destination"
+  for mv_cmd in "mv" "rename"
+  do
+    ERROR_MSG="testing 'pasta ${mv_cmd}'"
+    echo "$source_data" > "$source_file"
+    run "$PASTA" "$mv_cmd" "$source_name" "$dest_name"
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$out" =~ ^"Text pasta" ]]
+    [[ ! -f "$source_file" ]]
+    dest_file="${PASTA_DIR}/${dest_name}.txt"
+    [[ -f "$dest_file" ]]
+    [[ "$source_data" == "$(< "$dest_file")" ]]
+    rm "$dest_file"
+  done
+  CLEANUP=1
+}
+
+@test "pasta mv renames an image pasta to the given location" {
+  source_name="image_pasta"
+  source_file="${PASTA_DIR}/${source_name}.png"
+  backup_file="${TMP_DIR}/backup.png"
+  dest_name="destination"
+  for mv_cmd in "mv" "rename"
+  do
+    create_white_img "$source_file"
+    cp "$source_file" "$backup_file"
+    run "$PASTA" "$mv_cmd" "$source_name" "$dest_name"
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$out" =~ ^"Image pasta" ]]
+    [[ ! -f "$source_file" ]]
+    dest_file="${PASTA_DIR}/${dest_name}.png"
+    [[ -f "$dest_file" ]]
+    diff "$dest_file" "$backup_file"
+    rm "$dest_file"
+  done
+  CLEANUP=1
+}
+
+@test "pasta mv accepts names with slashes and spaces" {
+  source_name="source/text pasta"
+  source_file="${PASTA_DIR}/${source_name}.txt"
+  source_data="text data"
+  dest_name="destination/text pasta"
+  for mv_cmd in "mv" "rename"
+  do
+    ensure_parent_dirs "$source_file"
+    echo "$source_data" > "$source_file"
+    run "$PASTA" mv "$source_name" $dest_name
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$out" =~ ^"Text pasta" ]]
+    [[ ! -f "$source_file" ]]
+    [[ ! -d "$(dirname "$source_file")" ]]
+    dest_file="${PASTA_DIR}/${dest_name}.txt"
+    [[ -f "$dest_file" ]]
+    [[ "$source_data" == "$(< "$dest_file")" ]]
+    rm -r "$(dirname "$dest_file")"
+  done
+  CLEANUP=1
+}
+
+@test "pasta mv renames to the destination directory" {
+  source_name="text_pasta"
+  source_file="${PASTA_DIR}/${source_name}.txt"
+  source_data="text data"
+  echo "$source_data" > "$source_file"
+  dest_name="directory"
+  dummy_path="${PASTA_DIR}/${dest_name}/file.txt"
+  ensure_parent_dirs "$dummy_path"
+  echo "dummy data" > "$dummy_path"
+  run "$PASTA" mv "$source_name" "$dest_name"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Text pasta" ]]
+  [[ ! -f "$source_file" ]]
+  dest_file="${PASTA_DIR}/${dest_name}/${source_name}.txt"
+  [[ -f "$dest_file" ]]
+  [[ "$source_data" == "$(< "$dest_file")" ]]
+  CLEANUP=1
+}
+
+@test "pasta mv does not overwrite data when the source is a directory" {
+  source_name="my_dir"
+  source_dir="${PASTA_DIR}/${source_name}"
+  mkdir "$source_dir"
+  inner_name="foobar"
+  inner_file="${source_dir}/${inner_name}.txt"
+  inner_data="some data"
+  echo "$inner_data" > "$inner_file"
+  dest_name="my_destination"
+  text_file="${PASTA_DIR}/${dest_name}.txt"
+  text_data="more data"
+  echo "$text_data" > "$text_file"
+  # Echo no to pasta which should be ignored.
+  run bash -c "echo n | ${PASTA} mv ${source_name} ${dest_name}"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^Directory ]]
+  [[ ! -d "$source_dir" ]]
+  # Check that the new data was copied over.
+  dest_file="${PASTA_DIR}/${dest_name}/${inner_name}.txt"
+  [[ -f "$dest_file" ]]
+  [[ "$inner_data" == "$(< "$dest_file")" ]]
+  # Check that the existing text file was not changed.
+  [[ -f "$text_file" ]]
+  [[ "$text_data" == "$(< "$text_file")" ]]
+  CLEANUP=1
+}
+
+@test "pasta mv rejects sneaky directory traversal names" {
+  setup_sneaky_paths_test write
+  pasta_name="text_pasta"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  for sneaky_name in "${sneaky_names[@]}"
+  do
+    echo "text data" > "$pasta_file"
+    ERROR_MSG="testing pasta mv when destination is sneaky path '${sneaky_name}'"
+    run "$PASTA" mv "$pasta_name" "$sneaky_name"
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "is an invalid pasta name" ]]
+    [[ -f "$pasta_file" ]]
+    [[ ! -f "${PASTA_DIR}/${sneaky_name}.txt" ]]
+    rm "$pasta_file"
+    check_no_pastas
+  done
+  setup_sneaky_paths_test read
+  for sneaky_name in "${sneaky_names[@]}"
+  do
+    ERROR_MSG="testing pasta mv when source is sneaky path '${sneaky_name}'"
+    run "$PASTA" mv "$sneaky_name" "$pasta_name"
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "is an invalid pasta name" ]]
+    [[ ! -f "$pasta_file" ]]
+  done
+  CLEANUP=1
+}
+
+@test "pasta mv fails when given too few arguments" {
+  source_name="source_name"
+  source_file="${PASTA_DIR}/${source_name}.txt"
+  echo data > "$source_file"
+  for flags in "" "-f" "--force" "-v" "--verbose" "-f -v" "--verbose --force --"
+  do
+    for pos_arg in "" "$source_name"
+    do
+      ERROR_MSG="testing 'pasta mv ${flags} ${pos_arg}'"
+      run "$PASTA" mv $flags $pos_arg
+      [[ "$status" -eq 2 ]]
+      clean_output
+      [[ "$out" =~ ^"Usage: " ]]
+      [[ -f "$source_file" ]]
+    done
+  done
+  CLEANUP=1
+}
+
+@test "pasta mv fails when a nonexistent source pasta is specified" {
+  run "$PASTA" mv nonexistent destination
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "does not exist" ]]
+  CLEANUP=1
+}
+
+@test "pasta mv fails when the source is the destination" {
+  pasta_name="same_pasta"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  pasta_data="data"
+  echo "$pasta_data" > "$pasta_file"
+  run "$PASTA" mv "$pasta_name" "$pasta_name"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "are the same pasta"$ ]]
+  [[ -f "$pasta_file" ]]
+  [[ "$pasta_data" == "$(< "$pasta_file")" ]]
+
+  dir_name="my_dir"
+  pasta_dir="${PASTA_DIR}/${dir_name}"
+  mkdir "$pasta_dir"
+  inner_file="${pasta_dir}/something.txt"
+  inner_data="something"
+  echo "$inner_data" > "$inner_file"
+  run "$PASTA" mv "$dir_name" "$dir_name"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ ^"Error: cannot mv directory" ]]
+  [[ -f "$inner_file" ]]
+  [[ "$inner_data" == "$(< "$inner_file")" ]]
+  CLEANUP=1
+}
+
+@test "pasta mv works when overwriting" {
+  source_text="source_text"
+  source_text_file="${PASTA_DIR}/${source_text}.txt"
+  source_text_data="data"
+  echo "$source_text_data" > "$source_text_file"
+  source_text2="source_text_2"
+  source_text2_file="${PASTA_DIR}/${source_text2}.txt"
+  source_text2_data="different data"
+  echo "$source_text2_data" > "$source_text2_file"
+  source_img="source_img"
+  source_img_file="${PASTA_DIR}/${source_img}.png"
+  source_img2="source_img_2"
+  source_img2_file="${PASTA_DIR}/${source_img2}.png"
+  create_white_img "$source_img_file" 32 32
+  source_img_backup="${TMP_DIR}/backup1.png"
+  cp "$source_img_file" "$source_img_backup"
+  create_white_img "$source_img2_file" 36 36
+  source_img2_backup="${TMP_DIR}/backup2.png"
+  cp "$source_img2_file" "$source_img2_backup"
+
+  overwritten_name="overwritten_pasta"
+  overwritten_text="${PASTA_DIR}/${overwritten_name}.txt"
+  overwritten_img="${PASTA_DIR}/${overwritten_name}.png"
+  overwritten_text_data="different data"
+  echo "$overwritten_text_data" > "$overwritten_text"
+
+  # Test overwriting text with text.
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} mv ${source_text} ${overwritten_name}"
+  [[ "$status" -eq 3 ]]
+  # Data should be the same.
+  [[ -f "$source_text_file" ]]
+  [[ -f "$overwritten_text" ]]
+  [[ "$overwritten_text_data" == "$(< "$overwritten_text")" ]]
+  # Check behavior when yes is given.
+  run bash -c "echo y | ${PASTA} mv ${source_text} ${overwritten_name}"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ ! -f "$source_text_file" ]]
+  [[ -f "$overwritten_text" ]]
+  [[ "$source_text_data" == "$(< "$overwritten_text")" ]]
+
+  # Test overwriting text with image.
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} mv ${source_img} ${overwritten_name}"
+  # User rejected overwriting, so data should still be text.
+  [[ "$status" -eq 3 ]]
+  # Data should be the same.
+  [[ -f "$source_img_file" ]]
+  [[ -f "$overwritten_text" ]]
+  [[ ! -f "$overwritten_img" ]]
+  [[ "$source_text_data" == "$(< "$overwritten_text")" ]]
+  # Check behavior when yes is given.
+  run bash -c "echo y | ${PASTA} mv ${source_img} ${overwritten_name}"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ ! -f "$source_img_file" ]]
+  [[ -f "$overwritten_img" ]]
+  [[ ! -f "$overwritten_text" ]]
+  diff "$overwritten_img" "$source_img_backup"
+
+  # Test overwriting image with image.
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} mv ${source_img2} ${overwritten_name}"
+  # User rejected overwriting, so data should still be the same.
+  [[ "$status" -eq 3 ]]
+  # Data should be the same.
+  [[ -f "$source_img2_file" ]]
+  [[ -f "$overwritten_img" ]]
+  diff "$overwritten_img" "$source_img_backup"
+  # Check behavior when yes is given.
+  run bash -c "echo y | ${PASTA} mv ${source_img2} ${overwritten_name}"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ ! -f "$source_img2_file" ]]
+  [[ -f "$overwritten_img" ]]
+  diff "$overwritten_img" "$source_img2_backup"
+
+  # Test overwriting image with text.
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} mv ${source_text2} ${overwritten_name}"
+  # User rejected overwriting, so data should still be image.
+  [[ "$status" -eq 3 ]]
+  # data Should be the same.
+  [[ -f "$source_text2_file" ]]
+  [[ -f "$overwritten_img" ]]
+  [[ ! -f "$overwritten_text" ]]
+  diff "$overwritten_img" "$source_img2_backup"
+  # Check behavior when yes is given.
+  run bash -c "echo y | ${PASTA} mv ${source_text2} ${overwritten_name}"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ ! -f "$source_text2_file" ]]
+  [[ -f "$overwritten_text" ]]
+  [[ ! -f "$overwritten_img" ]]
+  [[ "$source_text2_data" == "$(< "$overwritten_text")" ]]
+  CLEANUP=1
+}
+
+@test "pasta mv with the force flag doesn't ask for overwrite" {
+  source_name="textfile"
+  source_file="${PASTA_DIR}/${source_name}.txt"
+  source_data="new data"
+  dest_name="dest_name"
+  dest_file="${PASTA_DIR}/${dest_name}.txt"
+  for force_flag in '-f' '--force'
+  do
+    ERROR_MSG="testing 'pasta mv ${force_flag}'"
+    echo "$source_data" > "$source_file"
+    echo "old data" > "$dest_file"
+    # Echo no to pasta which should be ignored.
+    run bash -c "echo n | ${PASTA} mv ${force_flag} ${source_name} $dest_name"
+    [[ "$status" -eq 0 ]]
+    [[ -f "$dest_file" ]]
+    [[ ! -f "$source_file" ]]
+    [[ "$source_data" == "$(< "$dest_file")" ]]
+    rm "$dest_file"
   done
   CLEANUP=1
 }

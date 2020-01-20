@@ -20,45 +20,45 @@ pasta_usage() {
   pasta_version
   echo
   echo "Usage:
-    $PROGRAM init [DIRECTORY]
+    ${PROGRAM} init [DIRECTORY]
         Initialize the copypasta storage.
         If DIRECTORY is not provided, it will be initialized to ~/.pastas.
-    $PROGRAM save [--force,-f] PASTA_NAME
+    ${PROGRAM} save [--force,-f] PASTA_NAME
         Save the data on the clipboard as PASTA_NAME.
-    $PROGRAM insert [--force,-f] PASTA_NAME
+    ${PROGRAM} insert [--force,-f] PASTA_NAME
         Open a text editor to write a copypasta.
-    $PROGRAM file [--force,-f] FILE PASTA_NAME
+    ${PROGRAM} file [--force,-f] FILE PASTA_NAME
         Save the file as PASTA_NAME.
-    $PROGRAM [load] PASTA_NAME
+    ${PROGRAM} [load] PASTA_NAME
         Place the existing copypasta on the clipboard.
-    $PROGRAM paste [--force,-f] PASTA_NAME FILE
+    ${PROGRAM} paste [--force,-f] PASTA_NAME FILE
         Paste the copypasta to a file.
-    $PROGRAM inspect|show PASTA_NAME
+    ${PROGRAM} inspect|show PASTA_NAME
         Show the copypasta.
-    $PROGRAM [list|ls] [DIRECTORY]
+    ${PROGRAM} [list|ls] [DIRECTORY]
         List copypastas.
-    $PROGRAM find PASTA_NAMES
+    ${PROGRAM} find PASTA_NAMES
         List copypastas which match the pasta names.
-    $PROGRAM grep SEARCH_STRING
+    ${PROGRAM} grep SEARCH_STRING
         Search copypastas which contain the search string.
-    $PROGRAM alias|ln [--symbolic,-s] [--force,-f] PASTA_1 PASTA_2
+    ${PROGRAM} alias|ln [--symbolic,-s] [--force,-f] PASTA_1 PASTA_2
         Create a link to PASTA_1 named PASTA_2.
-    $PROGRAM cp [--force,-f] PASTA_1 PASTA_2
+    ${PROGRAM} cp [--verbose,-v] [--recursive,-r] [--fcrce,-f] SOURCE_PASTA DEST_PASTA
         Create a copy of PASTA_1 named PASTA_2.
-    $PROGRAM rename|mv [--force,-f] PASTA_1 PASTA_2
+    ${PROGRAM} rename|mv [--verbose,-v] [--force,-f] SOURCE_PASTA DEST_PASTA
         Rename PASTA_1 to PASTA_2
-    $PROGRAM delete|remove|rm [--recursive,-r] PASTA_NAME
+    ${PROGRAM} delete|remove|rm [--recursive,-r] PASTA_NAME
         Delete the copypasta.
-    $PROGRAM edit PASTA_NAME
+    ${PROGRAM} edit PASTA_NAME
         Edit the copypasta.
-    $PROGRAM help|usage
+    ${PROGRAM} help|usage
         Display this help message.
-    $PROGRAM version
+    ${PROGRAM} version
         Display version information."
 }
 
 pasta_init() {
-  [[ "$#" -le 1 ]] || quit "Usage: $PROGRAM init [PASTA_DIRECTORY]"
+  [[ "$#" -le 1 ]] || quit "Usage: ${PROGRAM} init [PASTA_DIRECTORY]"
   check_exists "$PASTA_SETTINGS" "A pasta directory"
   local pasta_dir="$HOME/.pastas"
   if [[ "$#" -eq 1 ]]
@@ -72,14 +72,15 @@ pasta_init() {
 }
 
 pasta_save() {
-  local force=""
+  local force
   case "${1:-}" in
     -f|--force) shift; force="force" ;;
     --) shift ;;
+    -*) quit "${PROGRAM} ${COMMAND}: unknown argument '${1}'" ;;
   esac
-  [[ "$#" -ge 1 ]] || quit "Usage: $PROGRAM save [--force,-f] PASTA_NAME"
+  [[ "$#" -ge 1 ]] || quit "Usage: ${PROGRAM} save [--force,-f] PASTA_NAME"
   local pasta_name="$*"
-  check_pasta_name "$pasta_name" write $force
+  check_pasta_name "$pasta_name" write "${force:-}"
   local temp_file
   create_temp_file temp_file
   [[ -f "$temp_file" ]]
@@ -94,14 +95,15 @@ pasta_save() {
 }
 
 pasta_insert() {
-  local force=""
+  local force
   case "${1:-}" in
     -f|--force) shift; force="force" ;;
     --) shift ;;
+    -*) quit "${PROGRAM} ${COMMAND}: unknown argument '${1}'" ;;
   esac
-  [[ "$#" -ge 1 ]] || quit "Usage: $PROGRAM insert [--force,-f] PASTA_NAME"
+  [[ "$#" -ge 1 ]] || quit "Usage: ${PROGRAM} insert [--force,-f] PASTA_NAME"
   local pasta_name="$*"
-  check_pasta_name "$pasta_name" write $force
+  check_pasta_name "$pasta_name" write "${force:-}"
   local temp_file
   create_temp_file temp_file
   # Remove the temporary file to detect a difference between exiting the
@@ -113,16 +115,17 @@ pasta_insert() {
 }
 
 pasta_file() {
-  local force=""
+  local force
   case "${1:-}" in
     -f|--force) shift; force="force" ;;
     --) shift ;;
+    -*) quit "${PROGRAM} ${COMMAND}: unknown argument '${1}'" ;;
   esac
-  [[ $# -ge 2 ]] || quit "Usage: $PROGRAM file [--force,-f] FILE PASTA_NAME"
+  [[ $# -ge 2 ]] || quit "Usage: ${PROGRAM} file [--force,-f] FILE PASTA_NAME"
   local file="$1"
   local pasta_name="${*:2}"
   [[ -f "$file" ]] || { [[ -d "$file" ]] && quit "Error: ${file} is a directory"; } || quit "Error: no file '${file}' exists"
-  check_pasta_name "$pasta_name" write $force
+  check_pasta_name "$pasta_name" write "${force:-}"
   local mimetype="$(file --mime-type -b "$file")"
   local ftype="$(cut -d'/' -f1 <<< "$mimetype")"
   create_pasta_from_file "$file" "$ftype" "$pasta_name" "$mimetype"
@@ -187,7 +190,7 @@ pasta_list_dir() {
   local pasta_path="$(realpath --relative-to="$PASTA_DIR" "$full_path")"
   if [[ -d "$full_path" ]]
   then
-    [[ "$pasta_path" == "." ]] && echo Pasta Store || echo "$pasta_path"
+    [[ "$pasta_path" == "." ]] && echo "Pasta Store" || echo "$pasta_path"
   else
     local pasta_type pasta_file
     if check_name_exists "$pasta_path" check pasta_type pasta_file
@@ -221,7 +224,84 @@ pasta_alias() {
 }
 
 pasta_move() {
-  not_implemented
+  local force="" recursive="" verbose=""
+  while true
+  do
+    case "${1:-}" in
+      -f|--force) force="-f" ;;
+      -r|--recursive) recursive="-r" ;;
+      -v|--verbose) verbose="-v" ;;
+      --) shift; break ;;
+      -*) quit "${PROGRAM} ${COMMAND}: unknown argument '${1}'" ;;
+      *) break ;;
+    esac
+    shift
+  done
+  if [[ "$COMMAND" == "cp" ]]
+  then
+    [[ "$#" -ge 2 ]] || quit "Usage: ${PROGRAM} cp [--verbose,-v] [--recursive,-r] [--force,-f] SOURCE_PASTA DEST_PASTA"
+  elif [[ ! "$COMMAND" =~ ^(mv|rename)$ ]]
+  then
+    echoerr "Error: pasta_move unknown command ${COMMAND}"
+    exit 1
+  elif [[ -n "$recursive" ]]
+  then
+    quit "${PROGRAM} ${COMMAND}: unknown argument '${1}'"
+  else
+    [[ "$#" -ge 2 ]] || quit "Usage: ${PROGRAM} ${COMMAND} [--verbose,-v] [--force,-f] SOURCE_PASTA DEST_PASTA"
+    COMMAND="mv"
+  fi
+  local source_pasta="$1"
+  local dest_pasta="${*:2}"
+  local source_type source_file
+  check_pasta_name "$source_pasta" read source_type source_file
+  if [[ "$COMMAND" == "cp" ]] && [[ "$source_type" == "dir" ]] && [[ -z "$recursive" ]]
+  then
+    quit "Error: '${source_pasta}' is a directory. Please use the --recursive flag"
+  fi
+  local orig_dest_file
+  case "$source_type" in
+    dir) orig_dest_file="${PASTA_DIR}/$dest_pasta" ;;
+    text) orig_dest_file="${PASTA_DIR}/${dest_pasta}.txt" ;;
+    image) orig_dest_file="${PASTA_DIR}/${dest_pasta}.png" ;;
+    *) echoerr "Error: check_pasta_name returned unknown type '${source_type}'"; exit 1 ;;
+  esac
+  local dest_type dest_file
+  # Use the check mode instead of write in case the files are the same
+  if check_pasta_name "$dest_pasta" check dest_type dest_file
+  then
+    if [[ "$dest_type" == "dir" ]]
+    then
+      [[ ! "$source_file" -ef "$dest_file" ]] || quit "Error: cannot ${COMMAND} directory '${source_pasta}' into itself"
+      # The destination file should be changed to the corresponding
+      # directory, which cp or mv will deal with accordingly.
+    else
+      if [[ "$source_type" != "dir" ]]
+      then
+        [[ ! "$source_file" -ef "$dest_file" ]] || quit "Error: '${source_pasta}' and '${dest_pasta}' are the same pasta"
+        [[ -n "$force" ]] || check_exists "$dest_file" "$dest_pasta"
+      fi
+      dest_file="$orig_dest_file"
+    fi
+  else
+    dest_file="$orig_dest_file"
+  fi
+  ensure_parent_dirs "$dest_file"
+  $COMMAND $recursive $force $verbose "$source_file" "$dest_file"
+
+  local formatted_source_type
+  case "$source_type" in
+    text|image) formatted_source_type="${source_type^} pasta" ;;
+    dir) formatted_source_type="Directory" ;;
+    *) echoerr "Error: check_pasta_name returned unknown type '${source_type}'"; exit 1 ;;
+  esac
+  case "$COMMAND" in
+    cp) echo "${formatted_source_type} '${source_pasta}' copied to '${dest_pasta}'" ;;
+    mv)
+      rmdir --ignore-fail-on-non-empty -p "$(dirname "$source_file")"
+      echo "${formatted_source_type} '${source_pasta}' renamed to '${dest_pasta}'"
+      ;;
+  esac
 }
 
 pasta_delete() {
@@ -275,7 +355,7 @@ before using pasta."
 
 # Usage: check_exists FILE DESCRIPTION
 check_exists() {
-  [[ ! -f "$1" ]] || yesno "$2 already exists. Overwrite it?"
+  [[ ! -f "$1" ]] || { yesno "$2 already exists. Overwrite it?"; rm "$1"; }
 }
 
 # Usage: check pasta_name_safety PASTA_NAME
@@ -309,6 +389,7 @@ check_name_exists() {
         read "$type_var" "$file_var" <<< "text $pasta_txt_file"
       elif [[ -f "$pasta_img_file" ]]
       then
+
         read "$type_var" "$file_var" <<< "image $pasta_img_file"
       elif [[ -d "$pasta_subdir" ]]
       then
@@ -323,7 +404,7 @@ check_name_exists() {
     write)
       if [[ -f "$pasta_txt_file" ]] || [[ -f "$pasta_img_file" ]]
       then
-        local force="${3:-}"
+        local force="$3"
         [[ "$force" == "force" ]] || yesno "${pasta_name} already exists. Overwrite it?"
         rm -f "$pasta_txt_file" "$pasta_img_file"
       fi

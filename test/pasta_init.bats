@@ -87,6 +87,9 @@ teardown() {
     "show ${pasta_name}"
     "inspect"
     "inspect ${pasta_name}"
+    "cp ${pasta_name} dummy"
+    "mv ${pasta_name} dummy"
+    "rename ${pasta_name} dummy"
   )
   # Debug output should not be helpful for this test case.
   unset DEBUG
