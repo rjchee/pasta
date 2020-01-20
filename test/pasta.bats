@@ -85,7 +85,7 @@ teardown() {
   setup_sneaky_paths_test write
   for sneaky_name in "${sneaky_names[@]}"
   do
-    ERROR_MSG="testing pasta save on sneaky path '${sneaky_name}'"
+    ERROR_MSG="testing 'pasta save' on sneaky path '${sneaky_name}'"
     argcopy "$BATS_TEST_DESCRIPTION" "$sneaky_name"
     run "$PASTA" save "$sneaky_name"
     [[ "$status" -eq 2 ]]
@@ -368,7 +368,7 @@ teardown() {
   export EDITOR="cp ${PASTA_SETTINGS}"
   for sneaky_name in "${sneaky_names[@]}"
   do
-    ERROR_MSG="testing pasta insert on sneaky path '${sneaky_name}'"
+    ERROR_MSG="testing 'pasta insert' on sneaky path '${sneaky_name}'"
     argcopy "$BATS_TEST_DESCRIPTION"
     run "$PASTA" save "$sneaky_name"
     [[ "$status" -eq 2 ]]
@@ -500,7 +500,7 @@ teardown() {
   echo "text data" >"$text_file"
   for sneaky_name in "${sneaky_names[@]}"
   do
-    ERROR_MSG="testing pasta file on sneaky path '${sneaky_name}'"
+    ERROR_MSG="testing 'pasta file' on sneaky path '${sneaky_name}'"
     argcopy "$BATS_TEST_DESCRIPTION"
     run "$PASTA" save "$sneaky_name"
     [[ "$status" -eq 2 ]]
@@ -615,10 +615,10 @@ teardown() {
   text_file="${PASTA_DIR}/${pasta_name}.txt"
   echo "text data" > "$text_file"
 
-  for load_cmd in "$PASTA" "${PASTA} load"
+  for load_cmd in "" "load"
   do
-    ERROR_MSG="testing $load_cmd"
-    run $load_cmd "$pasta_name"
+    ERROR_MSG="testing 'pasta ${load_cmd}'"
+    run "$PASTA" $load_cmd "$pasta_name"
     [[ "$status" -eq 0 ]]
     pasted_file="${TMP_DIR}/pasted.txt"
     $paste_text >"$pasted_file"
@@ -632,10 +632,10 @@ teardown() {
   image_file="${PASTA_DIR}/${pasta_name}.png"
   create_white_img "$image_file"
 
-  for load_cmd in "$PASTA" "${PASTA} load"
+  for load_cmd in "" "load"
   do
-    ERROR_MSG="testing $load_cmd"
-    run $load_cmd "$pasta_name"
+    ERROR_MSG="testing 'pasta ${load_cmd}'"
+    run "$PASTA" $load_cmd "$pasta_name"
     [[ "$status" -eq 0 ]]
     pasted_file="${TMP_DIR}/pasted.png"
     $paste_text >"$pasted_file"
@@ -653,10 +653,10 @@ teardown() {
   mkdir "$overloaded_dir"
   echo "more data" > "${overloaded_dir}/${other_pasta_name}.txt"
 
-  for load_cmd in "$PASTA" "${PASTA} load"
+  for load_cmd in "" "load"
   do
-    ERROR_MSG="testing $load_cmd"
-    run $load_cmd "$pasta_name"
+    ERROR_MSG="testing 'pasta ${load_cmd}'"
+    run "$PASTA" $load_cmd "$pasta_name"
     [[ "$status" -eq 0 ]]
     clean_output
     [[ "$out" =~ ^"Loaded" ]]
@@ -685,12 +685,12 @@ teardown() {
 @test "pasta load rejects sneaky directory traversal names" {
   setup_sneaky_paths_test read
 
-  for load_cmd in "$PASTA" "${PASTA} load"
+  for load_cmd in "" "load"
   do
     for sneaky_name in "${sneaky_names[@]}"
     do
-      ERROR_MSG="testing ${load_cmd} on sneaky path '${sneaky_name}'"
-      run $load_cmd "$sneaky_name"
+      ERROR_MSG="testing 'pasta ${load_cmd}' on sneaky path '${sneaky_name}'"
+      run "$PASTA" $load_cmd "$sneaky_name"
       [[ "$status" -eq 2 ]]
       clean_output
       [[ "$out" =~ "is an invalid pasta name" ]]
@@ -701,15 +701,11 @@ teardown() {
 }
 
 @test "pasta load fails when a nonexistent pasta is specified" {
-  for load_cmd in "" "load"
-  do
-    ERROR_MSG="testing pasta ${load_cmd}"
-    run "$PASTA" $load_cmd nonexistent_pasta
-    [[ "$status" -eq 2 ]]
-    clean_output
-    [[ "$out" =~ "does not exist" ]]
-    clipboard_is_empty
-  done
+  run "$PASTA" nonexistent_pasta
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "does not exist" ]]
+  clipboard_is_empty
   CLEANUP=1
 }
 
@@ -721,7 +717,7 @@ teardown() {
 
   for cmd in "show" "inspect"
   do
-    ERROR_MSG="testing command 'pasta ${cmd}'"
+    ERROR_MSG="testing 'pasta ${cmd}'"
     run "$PASTA" "$cmd" "$pasta_name"
     [[ "$status" -eq 0 ]]
     clean_output
@@ -739,7 +735,7 @@ teardown() {
 
   for cmd in "show" "inspect"
   do
-    ERROR_MSG="testing command 'pasta ${cmd}'"
+    ERROR_MSG="testing 'pasta ${cmd}'"
     run "$PASTA" "$cmd" "$pasta_name"
     [[ "$status" -eq 0 ]]
     mock_called "$img_open_cmd" image_file
@@ -758,7 +754,7 @@ teardown() {
 
   for show_cmd in "show" "inspect"
   do
-    ERROR_MSG="testing pasta $show_cmd"
+    ERROR_MSG="testing 'pasta ${show_cmd}'"
     run "$PASTA" "$show_cmd" "$pasta_name"
     [[ "$status" -eq 0 ]]
     clean_output
@@ -776,7 +772,7 @@ teardown() {
 
   for cmd in "show" "inspect"
   do
-    ERROR_MSG="testing command 'pasta ${cmd}'"
+    ERROR_MSG="testing 'pasta ${cmd}'"
     run "$PASTA" "$cmd" "$pasta_name"
     [[ "$status" -eq 0 ]]
     clean_output
@@ -788,29 +784,22 @@ teardown() {
 @test "pasta show rejects sneaky directory traversal names" {
   setup_sneaky_paths_test read
 
-  for show_cmd in "show" "inspect"
+  for sneaky_name in "${sneaky_names[@]}"
   do
-    for sneaky_name in "${sneaky_names[@]}"
-    do
-      ERROR_MSG="testing pasta ${show_cmd} on sneaky path '${sneaky_name}'"
-      run "$PASTA" "$show_cmd" "$sneaky_name"
-      [[ "$status" -eq 2 ]]
-      clean_output
-      [[ "$out" =~ "is an invalid pasta name" ]]
-    done
+    ERROR_MSG="testing 'pasta show' on sneaky path '${sneaky_name}'"
+    run "$PASTA" show "$sneaky_name"
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "is an invalid pasta name" ]]
   done
   CLEANUP=1
 }
 
 @test "pasta show fails when a nonexistent pasta is specified" {
-  for show_cmd in "show" "inspect"
-  do
-    ERROR_MSG="testing pasta ${show_cmd}"
-    run "$PASTA" "$show_cmd" nonexistent_pasta
-    [[ "$status" -eq 2 ]]
-    clean_output
-    [[ "$out" =~ "does not exist" ]]
-  done
+  run "$PASTA" inspect nonexistent_pasta
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "does not exist" ]]
   CLEANUP=1
 }
 
@@ -833,7 +822,7 @@ teardown() {
   done
 
   # Test running pasta list on the whole pasta directory.
-  for list_cmd in "list" "ls" "" "load" "show" "inspect"
+  for list_cmd in "list" "ls" "" "load" "show"
   do
     for all_path in "" "." "/" "./"
     do
@@ -928,7 +917,7 @@ teardown() {
 
   for list_cmd in "list" "ls"
   do
-    ERROR_MSG="testing pasta $list_cmd"
+    ERROR_MSG="testing 'pasta ${list_cmd}'"
     run "$PASTA" "$list_cmd" "$pasta_name"
     [[ "$status" -eq 0 ]]
     clean_output
@@ -943,32 +932,25 @@ teardown() {
 @test "pasta list rejects sneaky directory traversal names" {
   setup_sneaky_paths_test dir
 
-  for list_cmd in "list" "ls"
+  for sneaky_name in "${sneaky_names[@]}"
   do
-    for sneaky_name in "${sneaky_names[@]}"
-    do
-      ERROR_MSG="testing pasta ${list_cmd} on sneaky path '${sneaky_name}'"
-      run "$PASTA" "$list_cmd" "$sneaky_name"
-      [[ "$status" -eq 2 ]]
-      clean_output
-      [[ "$out" =~ "is an invalid pasta name" ]]
-      [[ ! "$out" =~ "$pasta_name" ]]
-    done
+    ERROR_MSG="testing 'pasta ls' on sneaky path '${sneaky_name}'"
+    run "$PASTA" ls "$sneaky_name"
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "is an invalid pasta name" ]]
+    [[ ! "$out" =~ "$pasta_name" ]]
   done
   CLEANUP=1
 }
 
 @test "pasta list fails when a nonexistent directory is specified" {
   nonexistent_name="nonexistent"
-  for list_cmd in "list" "ls"
-  do
-    ERROR_MSG="testing pasta ${list_cmd} on nonexistent path"
-    run "$PASTA" "$list_cmd" "$nonexistent_name"
-    [[ "$status" -eq 2 ]]
-    clean_output
-    [[ "$out" =~ "does not exist" ]]
-    [[ "$out" =~ "$nonexistent_name" ]]
-  done
+  run "$PASTA" list "$nonexistent_name"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "does not exist" ]]
+  [[ "$out" =~ "$nonexistent_name" ]]
   CLEANUP=1
 }
 
@@ -985,9 +967,9 @@ teardown() {
   mkdir "$image_path"
   echo abc > "${image_path}/ignored.txt"
 
-  for list_all_cmd in "$PASTA" "${PASTA} list" "${PASTA} ls"
+  for list_all_cmd in "" "list" "ls"
   do
-    run "$PASTA"
+    run "$PASTA" $list_all_cmd
     [[ "$status" -eq 0 ]]
     clean_output
     [[ "$out" =~ "$text_dir" ]]
@@ -1112,7 +1094,7 @@ teardown() {
   for sneaky_name in "${sneaky_names[@]}"
   do
     echo "text data" > "$pasta_file"
-    ERROR_MSG="testing pasta cp when destination is sneaky path '${sneaky_name}'"
+    ERROR_MSG="testing 'pasta cp' when destination is sneaky path '${sneaky_name}'"
     run "$PASTA" cp "$pasta_name" "$sneaky_name"
     [[ "$status" -eq 2 ]]
     clean_output
@@ -1124,7 +1106,7 @@ teardown() {
   setup_sneaky_paths_test read
   for sneaky_name in "${sneaky_names[@]}"
   do
-    ERROR_MSG="testing pasta cp when source is sneaky path '${sneaky_name}'"
+    ERROR_MSG="testing 'pasta cp' when source is sneaky path '${sneaky_name}'"
     run "$PASTA" cp "$sneaky_name" "$pasta_name"
     [[ "$status" -eq 2 ]]
     clean_output
@@ -1411,7 +1393,7 @@ teardown() {
   for sneaky_name in "${sneaky_names[@]}"
   do
     echo "text data" > "$pasta_file"
-    ERROR_MSG="testing pasta mv when destination is sneaky path '${sneaky_name}'"
+    ERROR_MSG="testing 'pasta mv' when destination is sneaky path '${sneaky_name}'"
     run "$PASTA" mv "$pasta_name" "$sneaky_name"
     [[ "$status" -eq 2 ]]
     clean_output
@@ -1424,7 +1406,7 @@ teardown() {
   setup_sneaky_paths_test read
   for sneaky_name in "${sneaky_names[@]}"
   do
-    ERROR_MSG="testing pasta mv when source is sneaky path '${sneaky_name}'"
+    ERROR_MSG="testing 'pasta mv' when source is sneaky path '${sneaky_name}'"
     run "$PASTA" mv "$sneaky_name" "$pasta_name"
     [[ "$status" -eq 2 ]]
     clean_output
