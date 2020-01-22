@@ -16,49 +16,79 @@ pasta_version() {
   fi
 }
 
+# Usage: _pasta_usage COMMAND [full]
+_pasta_usage() {
+  local cmd="$1"
+  local full
+  [[ "${2:-}" == "full" ]] && full=true || full=false
+  local prefix
+  if $full
+  then
+    # Add spacing if the full usage is required.
+    prefix="    ${PROGRAM}"
+  else
+    # Otherwise, this is for an error message.
+    prefix="Usage: ${PROGRAM}"
+  fi
+  # Print short usages.
+  case "$cmd" in
+    init) echo "${prefix} init [PASTA_DIRECTORY]" ;;
+    save) echo "${prefix} save [--force,-f] PASTA_NAME" ;;
+    insert) echo "${prefix} insert [--force,-f] PASTA_NAME" ;;
+    file) echo "${prefix} file [--force,-f] FILE PASTA_NAME" ;;
+    load) echo "${prefix} [load] PASTA_NAME" ;;
+    paste) echo "${prefix} paste [--force,-f] PASTA_NAME FILE" ;;
+    inspect|show) echo "${prefix} inspect|show PASTA_NAME" ;;
+    list|ls) echo "${prefix} [list|ls] [DIRECTORY]" ;;
+    find) echo "${prefix} find PASTA_NAMES" ;;
+    grep) echo "${prefix} grep SEARCH_STRING" ;;
+    alias|ln) echo "${prefix} alias|ln [--verbose,-v] [--symbolic,-s] [--force,-f] PASTA_NAME PASTA_ALIAS" ;;
+    cp) echo "${prefix} cp [--verbose,-v] [--recursive,-r] [--force,-f] SOURCE_PASTA DEST_PASTA" ;;
+    rename|mv) echo "${prefix} rename|mv [--verbose,-v] [--force,-f] SOURCE_PASTA DEST_PASTA" ;;
+    delete|remove|rm) echo "${prefix} delete|remove|rm [--recursive,-r] PASTA_NAME" ;;
+    edit) echo "${prefix} PASTA_NAME" ;;
+    help|usage) echo "${prefix} help|usage" ;;
+    version) echo "${prefix} version" ;;
+    *) echoerr "Error: _pasta_usage received unknown command ${cmd}"; exit 1 ;;
+  esac
+  $full || return 0
+  prefix="       "
+  case "$cmd" in
+    init)
+      echo "${prefix} Initialize the copypasta storage."
+      echo "${prefix} If DIRECTORY is not provided, it will be initialized to ~/.pastas."
+      ;;
+    save) echo "${prefix} Save the data on the clipboard as PASTA_NAME." ;;
+    insert) echo "${prefix} Open a text editor to write a copypasta." ;;
+    file) echo "${prefix} Save the file as PASTA_NAME." ;;
+    load) echo "${prefix} Place the existing copypasta on the clipboard." ;;
+    paste) echo "${prefix} Paste the copypasta to a file." ;;
+    inspect|show) echo "${prefix} Show the copypasta." ;;
+    list|ls) echo "${prefix} List copypastas." ;;
+    find) echo "${prefix} List copypastas which match the pasta names." ;;
+    grep) echo "${prefix} Search text copypastas which contain the search string." ;;
+    alias|ln) echo "${prefix} Create a link to PASTA_NAME named PASTA_ALIAS." ;;
+    cp) echo "${prefix} Create a copy of SOURCE_PASTA named DEST_PASTA." ;;
+    rename|mv) echo "${prefix} Rename SOURCE_PASTA to DEST_PASTA." ;;
+    delete|remove|rm) echo "${prefix} Delete the copypasta." ;;
+    edit) echo "${prefix} Edit the copypasta." ;;
+    help|usage) echo "${prefix} Display this help message." ;;
+    version) echo "${prefix} Display version information." ;;
+  esac
+}
+
 pasta_usage() {
   pasta_version
   echo
-  echo "Usage:
-    ${PROGRAM} init [DIRECTORY]
-        Initialize the copypasta storage.
-        If DIRECTORY is not provided, it will be initialized to ~/.pastas.
-    ${PROGRAM} save [--force,-f] PASTA_NAME
-        Save the data on the clipboard as PASTA_NAME.
-    ${PROGRAM} insert [--force,-f] PASTA_NAME
-        Open a text editor to write a copypasta.
-    ${PROGRAM} file [--force,-f] FILE PASTA_NAME
-        Save the file as PASTA_NAME.
-    ${PROGRAM} [load] PASTA_NAME
-        Place the existing copypasta on the clipboard.
-    ${PROGRAM} paste [--force,-f] PASTA_NAME FILE
-        Paste the copypasta to a file.
-    ${PROGRAM} inspect|show PASTA_NAME
-        Show the copypasta.
-    ${PROGRAM} [list|ls] [DIRECTORY]
-        List copypastas.
-    ${PROGRAM} find PASTA_NAMES
-        List copypastas which match the pasta names.
-    ${PROGRAM} grep SEARCH_STRING
-        Search copypastas which contain the search string.
-    ${PROGRAM} alias|ln [--symbolic,-s] [--force,-f] PASTA_1 PASTA_2
-        Create a link to PASTA_1 named PASTA_2.
-    ${PROGRAM} cp [--verbose,-v] [--recursive,-r] [--fcrce,-f] SOURCE_PASTA DEST_PASTA
-        Create a copy of PASTA_1 named PASTA_2.
-    ${PROGRAM} rename|mv [--verbose,-v] [--force,-f] SOURCE_PASTA DEST_PASTA
-        Rename PASTA_1 to PASTA_2
-    ${PROGRAM} delete|remove|rm [--recursive,-r] PASTA_NAME
-        Delete the copypasta.
-    ${PROGRAM} edit PASTA_NAME
-        Edit the copypasta.
-    ${PROGRAM} help|usage
-        Display this help message.
-    ${PROGRAM} version
-        Display version information."
+  echo "Usage:"
+  for cmd in "init" "save" "insert" "file" "load" "paste" "inspect" "list" "find" "grep" "alias" "cp" "rename" "delete" "edit" "help" "version"
+  do
+    _pasta_usage "$cmd" full
+  done
 }
 
 pasta_init() {
-  [[ "$#" -le 1 ]] || quit "Usage: ${PROGRAM} init [PASTA_DIRECTORY]"
+  [[ "$#" -le 1 ]] || usagequit init
   check_exists "$PASTA_SETTINGS" "A pasta directory"
   local pasta_dir="$HOME/.pastas"
   if [[ "$#" -eq 1 ]]
@@ -76,9 +106,9 @@ pasta_save() {
   case "${1:-}" in
     -f|--force) shift; force="force" ;;
     --) shift ;;
-    -*) quit "${PROGRAM} ${COMMAND}: unknown argument '${1}'" ;;
+    -*) flagquit "$1" ;;
   esac
-  [[ "$#" -ge 1 ]] || quit "Usage: ${PROGRAM} save [--force,-f] PASTA_NAME"
+  [[ "$#" -ge 1 ]] || usagequit save
   local pasta_name="$*"
   check_pasta_name "$pasta_name" write "${force:-}"
   local temp_file
@@ -99,9 +129,9 @@ pasta_insert() {
   case "${1:-}" in
     -f|--force) shift; force="force" ;;
     --) shift ;;
-    -*) quit "${PROGRAM} ${COMMAND}: unknown argument '${1}'" ;;
+    -*) flagquit "$1" ;;
   esac
-  [[ "$#" -ge 1 ]] || quit "Usage: ${PROGRAM} insert [--force,-f] PASTA_NAME"
+  [[ "$#" -ge 1 ]] || usagequit insert
   local pasta_name="$*"
   check_pasta_name "$pasta_name" write "${force:-}"
   local temp_file
@@ -119,9 +149,9 @@ pasta_file() {
   case "${1:-}" in
     -f|--force) shift; force="force" ;;
     --) shift ;;
-    -*) quit "${PROGRAM} ${COMMAND}: unknown argument '${1}'" ;;
+    -*) flagquit "$1" ;;
   esac
-  [[ $# -ge 2 ]] || quit "Usage: ${PROGRAM} file [--force,-f] FILE PASTA_NAME"
+  [[ $# -ge 2 ]] || usagequit file
   local file="$1"
   local pasta_name="${*:2}"
   [[ -f "$file" ]] || { [[ -d "$file" ]] && quit "Error: ${file} is a directory"; } || quit "Error: no file '${file}' exists"
@@ -219,75 +249,75 @@ pasta_grep() {
   not_implemented
 }
 
-pasta_alias() {
-  not_implemented
-}
-
 pasta_move() {
-  local force="" recursive="" verbose=""
+  local force="" recursive="" verbose="" symbolic=""
+  local cmd
+  case "$COMMAND" in
+    cp) cmd="cp" ;;
+    rename|mv) cmd="mv" ;;
+    alias|ln) cmd="ln" ;;
+    *) echoerr "Unknown command 'pasta ${COMMAND}'"; exit 1 ;;
+  esac
   while true
   do
     case "${1:-}" in
       -f|--force) force="-f" ;;
-      -r|--recursive) recursive="-r" ;;
+      -r|--recursive)
+        [[ "$cmd" == "cp" ]] || flagquit "$1"
+        recursive="-r"
+        ;;
+      -s|--symbolic)
+        [[ "$cmd" == "ln" ]] || flagquit "$1"
+        symbolic="-s"
+        ;;
       -v|--verbose) verbose="-v" ;;
       --) shift; break ;;
-      -*) quit "${PROGRAM} ${COMMAND}: unknown argument '${1}'" ;;
+      -*) flagquit "$1" ;;
+      # Done with flags
       *) break ;;
     esac
     shift
   done
-  if [[ "$COMMAND" == "cp" ]]
-  then
-    [[ "$#" -ge 2 ]] || quit "Usage: ${PROGRAM} cp [--verbose,-v] [--recursive,-r] [--force,-f] SOURCE_PASTA DEST_PASTA"
-  elif [[ ! "$COMMAND" =~ ^(mv|rename)$ ]]
-  then
-    echoerr "Error: pasta_move unknown command ${COMMAND}"
-    exit 1
-  elif [[ -n "$recursive" ]]
-  then
-    quit "${PROGRAM} ${COMMAND}: unknown argument '${1}'"
-  else
-    [[ "$#" -ge 2 ]] || quit "Usage: ${PROGRAM} ${COMMAND} [--verbose,-v] [--force,-f] SOURCE_PASTA DEST_PASTA"
-    COMMAND="mv"
-  fi
+  [[ "$#" -ge 2 ]] || usagequit "$COMMAND"
   local source_pasta="$1"
   local dest_pasta="${*:2}"
   local source_type source_file
   check_pasta_name "$source_pasta" read source_type source_file
-  if [[ "$COMMAND" == "cp" ]] && [[ "$source_type" == "dir" ]] && [[ -z "$recursive" ]]
+  if [[ "$source_type" == "dir" ]]
   then
-    quit "Error: '${source_pasta}' is a directory. Please use the --recursive flag"
+    if [[ "$cmd" == "cp" ]] && [[ -z "$recursive" ]]
+    then
+      quit "Error: '${source_pasta}' is a directory. Please use the --recursive flag"
+    elif [[ "$cmd" == "ln" ]] && [[ -z "$symbolic" ]]
+    then
+      quit "Error: '${source_pasta}' is a directory. Please use the --symbolic flag"
+    fi
   fi
-  local orig_dest_file
+  local dest_file
   case "$source_type" in
-    dir) orig_dest_file="${PASTA_DIR}/$dest_pasta" ;;
-    text) orig_dest_file="${PASTA_DIR}/${dest_pasta}.txt" ;;
-    image) orig_dest_file="${PASTA_DIR}/${dest_pasta}.png" ;;
+    dir) dest_file="${PASTA_DIR}/$dest_pasta" ;;
+    text) dest_file="${PASTA_DIR}/${dest_pasta}.txt" ;;
+    image) dest_file="${PASTA_DIR}/${dest_pasta}.png" ;;
     *) echoerr "Error: check_pasta_name returned unknown type '${source_type}'"; exit 1 ;;
   esac
-  local dest_type dest_file
-  # Use the check mode instead of write in case the files are the same
-  if check_pasta_name "$dest_pasta" check dest_type dest_file
+  local existing_dest_type existing_dest_file
+  # Use the check mode instead of write in case the files are the same.
+  if check_pasta_name "$dest_pasta" check existing_dest_type existing_dest_file
   then
-    if [[ "$dest_type" == "dir" ]]
+    if [[ "$existing_dest_type" == "dir" ]]
     then
-      [[ ! "$source_file" -ef "$dest_file" ]] || quit "Error: cannot ${COMMAND} directory '${source_pasta}' into itself"
-      # The destination file should be changed to the corresponding
-      # directory, which cp or mv will deal with accordingly.
-    else
-      if [[ "$source_type" != "dir" ]]
-      then
-        [[ ! "$source_file" -ef "$dest_file" ]] || quit "Error: '${source_pasta}' and '${dest_pasta}' are the same pasta"
-        [[ -n "$force" ]] || check_exists "$dest_file" "$dest_pasta"
-      fi
-      dest_file="$orig_dest_file"
+      [[ ! "$source_file" -ef "$existing_dest_file" ]] || quit "Error: cannot ${COMMAND} directory '${source_pasta}' into itself"
+      # The destination file is a directory, but the ln, cp, or mv commands
+      # will place the resulting pasta in that directory accordingly.
+      dest_file="$existing_dest_file"
+    elif [[ "$source_type" != "dir" ]]
+    then
+      [[ "$(realpath -sm "$source_file")" != "$(realpath -sm "$dest_file")" ]] || quit "Error: '${source_pasta}' and '${dest_pasta}' are the same pasta"
+      [[ -n "$force" ]] || check_exists "$existing_dest_file" "$dest_pasta"
     fi
-  else
-    dest_file="$orig_dest_file"
   fi
   ensure_parent_dirs "$dest_file"
-  $COMMAND $recursive $force $verbose "$source_file" "$dest_file"
+  $cmd $symbolic $recursive $force $verbose "$source_file" "$dest_file"
 
   local formatted_source_type
   case "$source_type" in
@@ -295,13 +325,16 @@ pasta_move() {
     dir) formatted_source_type="Directory" ;;
     *) echoerr "Error: check_pasta_name returned unknown type '${source_type}'"; exit 1 ;;
   esac
-  case "$COMMAND" in
-    cp) echo "${formatted_source_type} '${source_pasta}' copied to '${dest_pasta}'" ;;
+  local op
+  case "$cmd" in
+    ln) op="aliased" ;;
+    cp) op="copied" ;;
     mv)
       rmdir --ignore-fail-on-non-empty -p "$(dirname "$source_file")"
-      echo "${formatted_source_type} '${source_pasta}' renamed to '${dest_pasta}'"
+      op="renamed"
       ;;
   esac
+  echo "${formatted_source_type} '${source_pasta}' ${op} to '${dest_pasta}'"
 }
 
 pasta_delete() {
@@ -329,6 +362,19 @@ echoerr() {
 quit() {
   echoerr "$@"
   exit 2
+}
+
+# Exit with the usage message.
+# Usage: usagequit command
+usagequit() {
+  _pasta_usage "$1" >&2
+  exit 2
+}
+
+# Exit with an error message about an unknown flag.
+# Usage: argquit unknown_argument
+flagquit() {
+  quit "${PROGRAM} ${COMMAND}: unknown flag '${1}'"
 }
 
 # Exit with an error message but with the user-cancelled error code.
@@ -543,8 +589,7 @@ case "$COMMAND" in
   list|ls) shift; pasta_list "$@" ;;
   find|search) shift; pasta_find "$@" ;;
   grep) shift; pasta_grep "$@" ;;
-  alias|ln) shift; pasta_alias "$@" ;;
-  cp|rename|mv) shift; pasta_move "$@" ;;
+  alias|ln|cp|rename|mv) shift; pasta_move "$@" ;;
   delete|remove|rm) shift; pasta_delete "$@" ;;
   edit) shift; pasta_edit "$@" ;;
   help|--help|usage) shift; pasta_usage ;;
