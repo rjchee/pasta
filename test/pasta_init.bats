@@ -91,6 +91,9 @@ teardown() {
     "mv ${pasta_name} dummy"
     "alias ${pasta_name} dummy"
     "ln ${pasta_name} dummy"
+    "delete ${pasta_name}"
+    "remove ${pasta_name}"
+    "rm ${pasta_name}"
   )
   output_prefix="Pasta has not been initialized."
   # Debug output should not be helpful for this test case.

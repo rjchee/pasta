@@ -45,7 +45,7 @@ _pasta_usage() {
     alias|ln) echo "${prefix} alias|ln [--verbose,-v] [--symbolic,-s] [--force,-f] PASTA_NAME PASTA_ALIAS" ;;
     cp) echo "${prefix} cp [--verbose,-v] [--recursive,-r] [--force,-f] SOURCE_PASTA DEST_PASTA" ;;
     rename|mv) echo "${prefix} rename|mv [--verbose,-v] [--force,-f] SOURCE_PASTA DEST_PASTA" ;;
-    delete|remove|rm) echo "${prefix} delete|remove|rm [--recursive,-r] PASTA_NAME" ;;
+    delete|remove|rm) echo "${prefix} delete|remove|rm [--recursive,-r] PASTA_NAMES" ;;
     edit) echo "${prefix} PASTA_NAME" ;;
     help|usage) echo "${prefix} help|usage" ;;
     version) echo "${prefix} version" ;;
@@ -70,7 +70,7 @@ _pasta_usage() {
     alias|ln) echo "${prefix} Create a link to PASTA_NAME named PASTA_ALIAS." ;;
     cp) echo "${prefix} Create a copy of SOURCE_PASTA named DEST_PASTA." ;;
     rename|mv) echo "${prefix} Rename SOURCE_PASTA to DEST_PASTA." ;;
-    delete|remove|rm) echo "${prefix} Delete the copypasta." ;;
+    delete|remove|rm) echo "${prefix} Delete the given copypasta(s)." ;;
     edit) echo "${prefix} Edit the copypasta." ;;
     help|usage) echo "${prefix} Display this help message." ;;
     version) echo "${prefix} Display version information." ;;
@@ -209,7 +209,7 @@ pasta_show() {
 pasta_list() {
   get_pasta_dir
   local pasta_path="$*"
-  check_pasta_name_safety "$*"
+  [[ -z "$pasta_path" ]] || check_pasta_name_safety "$pasta_path"
   local full_path="${PASTA_DIR}/$pasta_path"
   pasta_list_dir "$full_path" "$pasta_path"
 }
@@ -330,7 +330,7 @@ pasta_move() {
     ln) op="aliased" ;;
     cp) op="copied" ;;
     mv)
-      rmdir --ignore-fail-on-non-empty -p "$(dirname "$source_file")"
+      remove_empty_ancestors "$source_file"
       op="renamed"
       ;;
   esac
@@ -338,7 +338,31 @@ pasta_move() {
 }
 
 pasta_delete() {
-  not_implemented
+  local recursive=""
+  case "${1:-}" in
+    -r|--recursive) shift; recursive="-r" ;;
+    --) shift ;;
+    -*) flagquit "$1" ;;
+  esac
+  [[ "$#" -ge 1 ]] || usagequit delete
+  local pasta_name pasta_type pasta_file
+  for pasta_name in "$@"
+  do
+    check_pasta_name "$pasta_name" read pasta_type pasta_file
+    local desc
+    case "$pasta_type" in
+      text) desc="text pasta" ;;
+      image) desc="image pasta" ;;
+      dir)
+        [[ -n "$recursive" ]] || quit "Error: '${pasta_name}' is a directory. Please use the --recursive flag"
+        desc="directory"
+        ;;
+      *) echoerr "check_pasta_name returned unknown pasta type '${pasta_type}'"; exit 1 ;;
+    esac
+    rm $recursive "$pasta_file"
+    remove_empty_ancestors "$pasta_file"
+    echo "Deleted ${desc} '${pasta_name}'"
+  done
 }
 
 pasta_edit() {
@@ -407,6 +431,7 @@ check_exists() {
 # Usage: check pasta_name_safety PASTA_NAME
 check_pasta_name_safety() {
   local name="$1"
+  [[ -n "$name" ]] || quit "Error: empty pasta name given"
   [[ "$name" != ".." ]] && [[ ! "$name" =~ ^"../" ]] && [[ ! "$name" =~ "/.."$ ]] && [[ ! "$name" =~ "/../" ]] || quit "${name} is an invalid pasta name, remove '..' from the name"
 }
 
@@ -500,6 +525,18 @@ create_temp_file() {
 # Usage: ensure_parent_dirs FILE
 ensure_parent_dirs() {
   mkdir -p "$(dirname "$1")"
+}
+
+# Removes the empty directories above the given file up to the pasta
+# directory.
+# Usage: remove_empty_ancestors PASTA_FILE
+remove_empty_ancestors() {
+  # Get the path of the parent relative to the pasta directory so rmdir
+  # doesn't remove the pasta directory.
+  local parent="$(realpath --relative-to="$PASTA_DIR" "$(dirname "$1")")"
+  # Run in a subshell to not change the parent's working directory, but only
+  # if the parent isn't the pasta directory.
+  [[ "$parent" == "." ]] || (cd "$PASTA_DIR" && rmdir --ignore-fail-on-non-empty -p "$parent")
 }
 
 # Creates a pasta file from an existing file.

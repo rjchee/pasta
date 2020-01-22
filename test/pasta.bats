@@ -1932,3 +1932,162 @@ teardown() {
   done
   CLEANUP=1
 }
+
+@test "pasta delete removes the text pasta" {
+  pasta_name="textfile"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  for delete_cmd in "delete" "remove" "rm"
+  do
+    ERROR_MSG="testing 'pasta ${delete_cmd}'"
+    echo data > "$pasta_file"
+    run "$PASTA" "$delete_cmd" "$pasta_name"
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$out" =~ ^"Deleted text pasta" ]]
+    check_no_pastas
+  done
+  CLEANUP=1
+}
+
+@test "pasta delete removes the image pasta" {
+  pasta_name="imagefile"
+  pasta_file="${PASTA_DIR}/${pasta_name}.png"
+  for delete_cmd in "delete" "remove" "rm"
+  do
+    ERROR_MSG="testing 'pasta ${delete_cmd}'"
+    create_white_img "$pasta_file"
+    run "$PASTA" "$delete_cmd" "$pasta_name"
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$out" =~ ^"Deleted image pasta" ]]
+    check_no_pastas
+  done
+  CLEANUP=1
+}
+
+@test "pasta delete removes the directory" {
+  pasta_name="dir"
+  pasta_dir="${PASTA_DIR}/${pasta_name}"
+  for delete_cmd in "delete" "remove" "rm"
+  do
+    for recurse_flag in "-r" "--recursive"
+    do
+      ERROR_MSG="testing 'pasta ${delete_cmd} ${recurse_flag}'"
+      mkdir "$pasta_dir"
+      echo data > "${pasta_dir}/pasta.txt"
+      run "$PASTA" "$delete_cmd" "$recurse_flag" "$pasta_name"
+      [[ "$status" -eq 0 ]]
+      clean_output
+      [[ "$out" =~ ^"Deleted directory" ]]
+      check_no_pastas
+    done
+  done
+  CLEANUP=1
+}
+
+@test "pasta delete accepts names with slashes and spaces" {
+  dir_name="dir"
+  first_pasta="${dir_name}/first pasta"
+  first_file="${PASTA_DIR}/${first_pasta}.txt"
+  second_pasta="${dir_name}/second pasta"
+  second_file="${PASTA_DIR}/${second_pasta}.txt"
+  for delete_cmd in "delete" "remove" "rm"
+  do
+    ERROR_MSG="testing 'pasta ${delete_cmd} ${first_pasta}'"
+    ensure_parent_dirs "$first_file"
+    echo data1 > "$first_file"
+    echo data2 > "$second_file"
+    run "$PASTA" "$delete_cmd" "$first_pasta"
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$out" =~ ^"Deleted text pasta" ]]
+    [[ ! -f "$first_file" ]]
+    # Check that the second file in the same directory is unaffected
+    [[ -f "$second_file" ]]
+    ERROR_MSG="testing 'pasta ${delete_cmd} ${second_pasta}'"
+    run "$PASTA" "$delete_cmd" "$second_pasta"
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$out" =~ ^"Deleted text pasta" ]]
+    check_no_pastas
+  done
+  CLEANUP=1
+}
+
+@test "pasta delete accepts multiple pasta names as arguments" {
+  text_pasta="text"
+  text_file="${PASTA_DIR}/${text_pasta}.txt"
+  image_pasta="image"
+  image_file="${PASTA_DIR}/${image_pasta}.png"
+  dir_name="dir"
+  pasta_dir="${PASTA_DIR}/${dir_name}"
+  for delete_cmd in "delete" "remove" "rm"
+  do
+    for recurse_flag in "-r" "--recursive"
+    do
+      ERROR_MSG="testing 'pasta ${delete_cmd} ${recurse_flag}'"
+      echo "text data" > "$text_file"
+      create_white_img "$image_file"
+      mkdir "$pasta_dir"
+      echo data > "${pasta_dir}/data.txt"
+      run "$PASTA" "$delete_cmd" "$recurse_flag" "$text_pasta" "$image_pasta" "$dir_name"
+      [[ "$status" -eq 0 ]]
+      clean_output
+      [[ "$out" =~ ^"Deleted text pasta".*"Deleted image pasta".*"Deleted directory" ]]
+      check_no_pastas
+    done
+  done
+  CLEANUP=1
+}
+
+@test "pasta delete rejects sneaky directory traversal names" {
+  setup_sneaky_paths_test read
+  for sneaky_name in "${sneaky_names[@]}"
+  do
+    ERROR_MSG="testing 'pasta delete' on sneaky path '${sneaky_name}'"
+    run "$PASTA" delete -r "$sneaky_name"
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "is an invalid pasta name" ]]
+    # Check that either the directory or text pasta exists
+    [[ -d "${PASTA_DIR}/${sneaky_name}" ]] || [[ -f "${PASTA_DIR}/${sneaky_name}.txt" ]]
+  done
+  CLEANUP=1
+}
+
+@test "pasta delete fails with no arguments" {
+  for recurse_flag in "" "-r" "--recursive"
+  do
+    ERROR_MSG="testing 'pasta delete ${recurse_flag}'"
+    run "$PASTA" delete $recurse_flag
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ ^"Usage: " ]]
+    check_no_pastas
+  done
+  CLEANUP=1
+}
+
+@test "pasta delete fails when trying to delete a directory without the recurse flag" {
+  dir_name="dir"
+  pasta_dir="${PASTA_DIR}/${dir_name}"
+  pasta_file="${pasta_dir}/file.txt"
+  text_data="data"
+  mkdir "$pasta_dir"
+  echo "$text_data" > "$pasta_file"
+  run "$PASTA" delete "$dir_name"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "is a directory. Please use the --recursive flag"$ ]]
+  [[ -f "$pasta_file" ]]
+  [[ "$text_data" == "$(< "$pasta_file")" ]]
+  CLEANUP=1
+}
+
+@test "pasta delete fails when a nonexistent pasta is specified" {
+  run "$PASTA" delete nonexistent
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "does not exist" ]]
+  CLEANUP=1
+}
