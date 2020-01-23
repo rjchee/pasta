@@ -94,6 +94,7 @@ teardown() {
     "delete ${pasta_name}"
     "remove ${pasta_name}"
     "rm ${pasta_name}"
+    "edit ${pasta_name}"
   )
   output_prefix="Pasta has not been initialized."
   # Debug output should not be helpful for this test case.

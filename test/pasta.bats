@@ -127,7 +127,7 @@ teardown() {
     run "$PASTA" save $force_flag
     [[ "$status" -eq 2 ]]
     clean_output
-    [[ "$out" =~ ^"Usage: " ]]
+    [[ "$out" =~ ^"Usage: ".*" save " ]]
     check_no_pastas
   done
   CLEANUP=1
@@ -330,13 +330,13 @@ teardown() {
     run "$PASTA" insert $force_flag
     [[ "$status" -eq 2 ]]
     clean_output
-    [[ "$out" =~ ^"Usage: " ]]
+    [[ "$out" =~ ^"Usage: ".*" insert " ]]
     check_no_pastas
   done
   CLEANUP=1
 }
 
-@test "pasta insert works when the editor is not set" {
+@test "pasta insert calls the default editor when EDITOR is not set" {
   # Create a temporary vi executable to replace the existing vi.
   mock_command vi 'echo something > "$1"'
   pasta_name="pasta_name"
@@ -357,23 +357,21 @@ teardown() {
   [[ "$status" -eq 0 ]]
   pasta_file="${PASTA_DIR}/${pasta_name}.txt"
   [[ -f "$pasta_file" ]]
-  diff "${PASTA_SETTINGS}" "$pasta_file"
+  diff "$PASTA_SETTINGS" "$pasta_file"
   CLEANUP=1
 }
 
 @test "pasta insert rejects sneaky directory traversal names" {
   setup_sneaky_paths_test write
-  # Replace the default editor with cp to simulate writing something to the file.
-  export EDITOR="cp ${PASTA_SETTINGS}"
+  mock_command vi
   for sneaky_name in "${sneaky_names[@]}"
   do
     ERROR_MSG="testing 'pasta insert' on sneaky path '${sneaky_name}'"
-    argcopy "$BATS_TEST_DESCRIPTION"
-    run "$PASTA" save "$sneaky_name"
+    run "$PASTA" insert "$sneaky_name"
     [[ "$status" -eq 2 ]]
     clean_output
     [[ "$out" =~ "is an invalid pasta name" ]]
-    [[ ! -f "${PASTA_DIR}/${sneaky_name}.txt" ]]
+    ! mock_called vi
     check_no_pastas
   done
   CLEANUP=1
@@ -440,7 +438,7 @@ teardown() {
       run "$PASTA" file $force_flag $text_file
       [[ "$status" -eq 2 ]]
       clean_output
-      [[ "$out" =~ ^"Usage: " ]]
+      [[ "$out" =~ ^"Usage: ".*" file " ]]
       check_no_pastas
     done
   done
@@ -500,8 +498,7 @@ teardown() {
   for sneaky_name in "${sneaky_names[@]}"
   do
     ERROR_MSG="testing 'pasta file' on sneaky path '${sneaky_name}'"
-    argcopy "$BATS_TEST_DESCRIPTION"
-    run "$PASTA" save "$sneaky_name"
+    run "$PASTA" file "$text_file" "$sneaky_name"
     [[ "$status" -eq 2 ]]
     clean_output
     [[ "$out" =~ "is an invalid pasta name" ]]
@@ -1171,7 +1168,7 @@ teardown() {
       run "$PASTA" alias $flags $pos_arg
       [[ "$status" -eq 2 ]]
       clean_output
-      [[ "$out" =~ ^"Usage: " ]]
+      [[ "$out" =~ ^"Usage: ".*" alias|ln " ]]
     done
   done
   CLEANUP=1
@@ -1463,7 +1460,7 @@ teardown() {
       run "$PASTA" cp $flags $pos_arg
       [[ "$status" -eq 2 ]]
       clean_output
-      [[ "$out" =~ ^"Usage: " ]]
+      [[ "$out" =~ ^"Usage: ".*" cp " ]]
     done
   done
   CLEANUP=1
@@ -1770,7 +1767,7 @@ teardown() {
       run "$PASTA" rename $flags $pos_arg
       [[ "$status" -eq 2 ]]
       clean_output
-      [[ "$out" =~ ^"Usage: " ]]
+      [[ "$out" =~ ^"Usage: ".*" rename|mv " ]]
       [[ -f "$source_file" ]]
     done
   done
@@ -2062,7 +2059,7 @@ teardown() {
     run "$PASTA" delete $recurse_flag
     [[ "$status" -eq 2 ]]
     clean_output
-    [[ "$out" =~ ^"Usage: " ]]
+    [[ "$out" =~ ^"Usage: ".*" delete|remove|rm " ]]
     check_no_pastas
   done
   CLEANUP=1
@@ -2089,5 +2086,133 @@ teardown() {
   [[ "$status" -eq 2 ]]
   clean_output
   [[ "$out" =~ "does not exist" ]]
+  CLEANUP=1
+}
+
+@test "pasta edit calls the editor" {
+  # Replace the default editor with cp to simulate writing something to the file.
+  export EDITOR="cp ${PASTA_SETTINGS}"
+  pasta_name="edit_test"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo "existing data" > "$pasta_file"
+  run "$PASTA" edit $pasta_name
+  [[ "$status" -eq 0 ]]
+  [[ -f "$pasta_file" ]]
+  diff -q "$pasta_file" "$PASTA_SETTINGS"
+  CLEANUP=1
+}
+
+@test "pasta edit calls the default editor when EDITOR is not set" {
+  mock_command vi
+  pasta_name="edit_test"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo "existing data" > "$pasta_file"
+  run "$PASTA" edit $pasta_name
+  [[ "$status" -eq 0 ]]
+  [[ -f "$pasta_file" ]]
+  mock_called vi vi_arg
+  [[ "$vi_arg" -ef "$pasta_file" ]]
+  CLEANUP=1
+}
+
+@test "pasta edit accepts names with slashes and spaces" {
+  # Replace the default editor with cp to simulate writing something to the file.
+  export EDITOR="cp ${PASTA_SETTINGS}"
+  pasta_name='edit/slashes/and spaces/in name'
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  ensure_parent_dirs "$pasta_file"
+  echo "existing data" > "$pasta_file"
+  run "$PASTA" edit $pasta_name
+  [[ "$status" -eq 0 ]]
+  [[ -f "$pasta_file" ]]
+  diff "$PASTA_SETTINGS" "$pasta_file"
+  CLEANUP=1
+}
+
+@test "pasta edit deletes a pasta if the editor makes it empty" {
+  # Replace the default editor with truncate to simulate deleting the contents of the file
+  export EDITOR="truncate -s0"
+  pasta_name="pasta_name"
+  echo "existing data" > "${PASTA_DIR}/${pasta_name}.txt"
+  run "$PASTA" edit "$pasta_name"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Deleted empty text pasta" ]]
+  check_no_pastas
+  CLEANUP=1
+}
+
+@test "pasta edit deletes a pasta and empty parent directories if the edit makes it empty" {
+  # Replace the default editor with truncate to simulate deleting the contents of the file
+  export EDITOR="truncate -s0"
+  pasta_name="dir/pasta_name"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  ensure_parent_dirs "$pasta_file"
+  echo "existing data" > "$pasta_file"
+  run "$PASTA" edit "$pasta_name"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Deleted empty text pasta" ]]
+  check_no_pastas
+  CLEANUP=1
+}
+
+@test "pasta edit rejects sneaky directory traversal names" {
+  setup_sneaky_paths_test read
+  mock_command vi
+  for sneaky_name in "${sneaky_names[@]}"
+  do
+    ERROR_MSG="testing 'pasta insert' on sneaky path '${sneaky_name}'"
+    run "$PASTA" edit "$sneaky_name"
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "is an invalid pasta name" ]]
+    ! mock_called vi
+  done
+  CLEANUP=1
+}
+
+@test "pasta edit fails with no arguments" {
+  mock_command vi
+  run "$PASTA" edit
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ ^"Usage: ".*" edit " ]]
+  ! mock_called vi
+  check_no_pastas
+  CLEANUP=1
+}
+
+@test "pasta edit fails when a nonexistent pasta is specified" {
+  mock_command vi
+  run "$PASTA" edit nonexistent
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "does not exist" ]]
+  ! mock_called vi
+  check_no_pastas
+  CLEANUP=1
+}
+
+@test "pasta edit fails when given a non-text pasta" {
+  mock_command vi
+  img_pasta="image_pasta"
+  img_file="${PASTA_DIR}/${img_pasta}.png"
+  create_white_img "$img_file"
+  run "$PASTA" edit "$img_pasta"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ ^"Error: cannot edit image pasta" ]]
+  ! mock_called vi
+
+  dir_name="my_dir"
+  pasta_dir="${PASTA_DIR}/${dir_name}"
+  mkdir "$pasta_dir"
+  echo data > "${pasta_dir}/text_pasta.txt"
+  run "$PASTA" edit "$dir_name"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ ^"Error: cannot edit directory" ]]
+  ! mock_called vi
   CLEANUP=1
 }
