@@ -235,6 +235,105 @@ teardown() {
   CLEANUP=1
 }
 
+@test "pasta load loads text on the clipboard" {
+  pasta_name="textdata"
+  text_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo "text data" > "$text_file"
+
+  for load_cmd in "" "load"
+  do
+    ERROR_MSG="testing 'pasta ${load_cmd}'"
+    run "$PASTA" $load_cmd "$pasta_name"
+    [[ "$status" -eq 0 ]]
+    pasted_file="${TMP_DIR}/pasted.txt"
+    $paste_text >"$pasted_file"
+    diff "$text_file" "$pasted_file"
+  done
+  CLEANUP=1
+}
+
+@test "pasta load loads images on the clipboard" {
+  pasta_name="imagedata"
+  image_file="${PASTA_DIR}/${pasta_name}.png"
+  create_white_img "$image_file"
+
+  for load_cmd in "" "load"
+  do
+    ERROR_MSG="testing 'pasta ${load_cmd}'"
+    run "$PASTA" $load_cmd "$pasta_name"
+    [[ "$status" -eq 0 ]]
+    pasted_file="${TMP_DIR}/pasted.png"
+    $paste_text >"$pasted_file"
+    diff "$image_file" "$pasted_file"
+  done
+  CLEANUP=1
+}
+
+@test "pasta load has priority over pasta list when load is specified" {
+  pasta_name="textdata"
+  overloaded_dir="${PASTA_DIR}/${pasta_name}"
+  text_file="${overloaded_dir}.txt"
+  echo "text_data" > "$text_file"
+  other_pasta_name="extra_name"
+  mkdir "$overloaded_dir"
+  echo "more data" > "${overloaded_dir}/${other_pasta_name}.txt"
+
+  for load_cmd in "" "load"
+  do
+    ERROR_MSG="testing 'pasta ${load_cmd}'"
+    run "$PASTA" $load_cmd "$pasta_name"
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$out" =~ ^"Loaded" ]]
+    [[ ! "$out" =~ "$other_pasta_name" ]]
+    pasted_file="${TMP_DIR}/pasted.txt"
+    $paste_text >"$pasted_file"
+    diff "$text_file" "$pasted_file"
+  done
+  CLEANUP=1
+}
+
+@test "pasta load accepts names with slashes and spaces" {
+  pasta_name="load/slashes/and/spaces in/name"
+  text_file="${PASTA_DIR}/${pasta_name}.txt"
+  ensure_parent_dirs "$text_file"
+  echo "text data" > "$text_file"
+
+  run "$PASTA" load "$pasta_name"
+  [[ "$status" -eq 0 ]]
+  pasted_file="${TMP_DIR}/pasted.txt"
+  $paste_text >"$pasted_file"
+  diff "$text_file" "$pasted_file"
+  CLEANUP=1
+}
+
+@test "pasta load rejects sneaky directory traversal names" {
+  setup_sneaky_paths_test read
+
+  for load_cmd in "" "load"
+  do
+    for sneaky_name in "${sneaky_names[@]}"
+    do
+      ERROR_MSG="testing 'pasta ${load_cmd}' on sneaky path '${sneaky_name}'"
+      run "$PASTA" $load_cmd "$sneaky_name"
+      [[ "$status" -eq 2 ]]
+      clean_output
+      [[ "$out" =~ "is an invalid pasta name" ]]
+      clipboard_is_empty
+    done
+  done
+  CLEANUP=1
+}
+
+@test "pasta load fails when a nonexistent pasta is specified" {
+  run "$PASTA" nonexistent_pasta
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "does not exist" ]]
+  clipboard_is_empty
+  CLEANUP=1
+}
+
 @test "pasta insert calls the editor" {
   # Replace the default editor with cp to simulate writing something to the file.
   export EDITOR="cp ${PASTA_SETTINGS}"
@@ -377,11 +476,139 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file saves a text file" {
+@test "pasta edit calls the editor" {
+  # Replace the default editor with cp to simulate writing something to the file.
+  export EDITOR="cp ${PASTA_SETTINGS}"
+  pasta_name="edit_test"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo "existing data" > "$pasta_file"
+  run "$PASTA" edit $pasta_name
+  [[ "$status" -eq 0 ]]
+  [[ -f "$pasta_file" ]]
+  diff -q "$pasta_file" "$PASTA_SETTINGS"
+  CLEANUP=1
+}
+
+@test "pasta edit calls the default editor when EDITOR is not set" {
+  mock_command vi
+  pasta_name="edit_test"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo "existing data" > "$pasta_file"
+  run "$PASTA" edit $pasta_name
+  [[ "$status" -eq 0 ]]
+  [[ -f "$pasta_file" ]]
+  mock_called vi vi_arg
+  [[ "$vi_arg" -ef "$pasta_file" ]]
+  CLEANUP=1
+}
+
+@test "pasta edit accepts names with slashes and spaces" {
+  # Replace the default editor with cp to simulate writing something to the file.
+  export EDITOR="cp ${PASTA_SETTINGS}"
+  pasta_name='edit/slashes/and spaces/in name'
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  ensure_parent_dirs "$pasta_file"
+  echo "existing data" > "$pasta_file"
+  run "$PASTA" edit $pasta_name
+  [[ "$status" -eq 0 ]]
+  [[ -f "$pasta_file" ]]
+  diff "$PASTA_SETTINGS" "$pasta_file"
+  CLEANUP=1
+}
+
+@test "pasta edit deletes a pasta if the editor makes it empty" {
+  # Replace the default editor with truncate to simulate deleting the contents of the file
+  export EDITOR="truncate -s0"
+  pasta_name="pasta_name"
+  echo "existing data" > "${PASTA_DIR}/${pasta_name}.txt"
+  run "$PASTA" edit "$pasta_name"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Deleted empty text pasta" ]]
+  check_no_pastas
+  CLEANUP=1
+}
+
+@test "pasta edit deletes a pasta and empty parent directories if the edit makes it empty" {
+  # Replace the default editor with truncate to simulate deleting the contents of the file
+  export EDITOR="truncate -s0"
+  pasta_name="dir/pasta_name"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  ensure_parent_dirs "$pasta_file"
+  echo "existing data" > "$pasta_file"
+  run "$PASTA" edit "$pasta_name"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Deleted empty text pasta" ]]
+  check_no_pastas
+  CLEANUP=1
+}
+
+@test "pasta edit rejects sneaky directory traversal names" {
+  setup_sneaky_paths_test read
+  mock_command vi
+  for sneaky_name in "${sneaky_names[@]}"
+  do
+    ERROR_MSG="testing 'pasta insert' on sneaky path '${sneaky_name}'"
+    run "$PASTA" edit "$sneaky_name"
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "is an invalid pasta name" ]]
+    ! mock_called vi
+  done
+  CLEANUP=1
+}
+
+@test "pasta edit fails with no arguments" {
+  mock_command vi
+  run "$PASTA" edit
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ ^"Usage: ".*" edit " ]]
+  ! mock_called vi
+  check_no_pastas
+  CLEANUP=1
+}
+
+@test "pasta edit fails when a nonexistent pasta is specified" {
+  mock_command vi
+  run "$PASTA" edit nonexistent
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "does not exist" ]]
+  ! mock_called vi
+  check_no_pastas
+  CLEANUP=1
+}
+
+@test "pasta edit fails when given a non-text pasta" {
+  mock_command vi
+  img_pasta="image_pasta"
+  img_file="${PASTA_DIR}/${img_pasta}.png"
+  create_white_img "$img_file"
+  run "$PASTA" edit "$img_pasta"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ ^"Error: cannot edit image pasta" ]]
+  ! mock_called vi
+
+  dir_name="my_dir"
+  pasta_dir="${PASTA_DIR}/${dir_name}"
+  mkdir "$pasta_dir"
+  echo data > "${pasta_dir}/text_pasta.txt"
+  run "$PASTA" edit "$dir_name"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ ^"Error: cannot edit directory" ]]
+  ! mock_called vi
+  CLEANUP=1
+}
+
+@test "pasta import saves a text file" {
   text_file="${TMP_DIR}/textfile.txt"
   pasta_name="textdata"
   echo "text data" >"$text_file"
-  run "$PASTA" file "$text_file" $pasta_name
+  run "$PASTA" import "$text_file" $pasta_name
   [[ "$status" -eq 0 ]]
   pasta_file="${PASTA_DIR}/${pasta_name}.txt"
   [[ -f "$pasta_file" ]]
@@ -389,11 +616,11 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file saves a PNG file" {
+@test "pasta import saves a PNG file" {
   image_file="${TMP_DIR}/image.png"
   pasta_name="png"
   create_white_img "$image_file"
-  run "$PASTA" file "$image_file" $pasta_name
+  run "$PASTA" import "$image_file" $pasta_name
   [[ "$status" -eq 0 ]]
   pasta_file="${PASTA_DIR}/${pasta_name}.png"
   [[ -f "$pasta_file" ]]
@@ -401,11 +628,11 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file saves a JPG file" {
+@test "pasta import saves a JPG file" {
   image_file="${TMP_DIR}/image.jpg"
   pasta_name="jpg"
   create_white_img "$image_file"
-  run "$PASTA" file "$image_file" $pasta_name
+  run "$PASTA" import "$image_file" $pasta_name
   [[ "$status" -eq 0 ]]
   pasta_file="${PASTA_DIR}/${pasta_name}.png"
   [[ -f "$pasta_file" ]]
@@ -414,11 +641,21 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file accepts names with slashes and spaces" {
+@test "pasta import imports a directory" {
+  CLEANUP=1
+  skip "This test has not been implemented yet"
+}
+
+@test "pasta import imports a compressed file" {
+  CLEANUP=1
+  skip "This test has not been implemented yet"
+}
+
+@test "pasta import accepts names with slashes and spaces" {
   pasta_name="file/slashes/and spaces/in/name"
   text_file="${TMP_DIR}/textfile.txt"
   echo "text data" >"$text_file"
-  run "$PASTA" file "$text_file" $pasta_name
+  run "$PASTA" import "$text_file" $pasta_name
   [[ "$status" -eq 0 ]]
   pasta_file="${PASTA_DIR}/${pasta_name}.txt"
   [[ -f "$pasta_file" ]]
@@ -426,33 +663,33 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file fails when given too few arguments" {
+@test "pasta import fails when given too few arguments" {
   text_file="${TMP_DIR}/textfile.txt"
   echo "text data" >"$text_file"
   for force_flag in "" "-f" "--force"
   do
     for text_file in "" "$text_file"
     do
-      ERROR_MSG="testing 'pasta file ${force_flag} ${text_file}'"
+      ERROR_MSG="testing 'pasta import ${force_flag} ${text_file}'"
       # Check when no pasta name is given.
-      run "$PASTA" file $force_flag $text_file
+      run "$PASTA" import $force_flag $text_file
       [[ "$status" -eq 2 ]]
       clean_output
-      [[ "$out" =~ ^"Usage: ".*" file " ]]
+      [[ "$out" =~ ^"Usage: ".*" import " ]]
       check_no_pastas
     done
   done
   CLEANUP=1
 }
 
-@test "pasta file fails when given an unknown file type" {
+@test "pasta import fails when given an unknown file type" {
   byte_file="${TMP_DIR}/bytes.bin"
   get_binary_data >"$byte_file"
   # Sanity check to make sure this file is not detected as an image or text.
   filetype="$(file --mime-type -b "$byte_file")"
   mimetype="$(echo "$filetype" | cut -d'/' -f1)"
   [[ "$mimetype" != "image" ]] && [[ "$mimetype" != "text" ]] || skip "test invalid because the test file has MIME type '${filetype}'"
-  run "$PASTA" file  "$byte_file" bytedata
+  run "$PASTA" import  "$byte_file" bytedata
   [[ "$status" -eq 2 ]]
   clean_output
   [[ "$out" =~ "unknown MIME type" ]]
@@ -460,8 +697,8 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file fails when given a nonexistent file" {
-  run "$PASTA" file "${TMP_DIR}/fake_file.txt" pasta_name
+@test "pasta import fails when given a nonexistent file" {
+  run "$PASTA" import "${TMP_DIR}/fake_file.txt" pasta_name
   [[ "$status" -eq 2 ]]
   clean_output
   [[ "$out" =~ "no file".*"exists" ]]
@@ -469,10 +706,10 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file fails when given an empty file" {
+@test "pasta import fails when given an empty file" {
   empty_file="${TMP_DIR}/empty.txt"
   touch "$empty_file"
-  run "$PASTA" file "${empty_file}" empty_pasta
+  run "$PASTA" import "${empty_file}" empty_pasta
   [[ "$status" -eq 2 ]]
   clean_output
   [[ "$out" =~ "is empty" ]]
@@ -480,10 +717,10 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file fails when given a directory" {
+@test "pasta import fails when given a directory" {
   dir_name="${TMP_DIR}/dir"
   mkdir "$dir_name"
-  run "$PASTA" file "$dir_name" pasta_name
+  run "$PASTA" import "$dir_name" pasta_name
   [[ "$status" -eq 2 ]]
   clean_output
   [[ "$out" =~ "is a directory" ]]
@@ -491,14 +728,14 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file rejects sneaky directory traversal names" {
+@test "pasta import rejects sneaky directory traversal names" {
   setup_sneaky_paths_test write
   text_file="${TMP_DIR}/textfile.txt"
   echo "text data" >"$text_file"
   for sneaky_name in "${sneaky_names[@]}"
   do
-    ERROR_MSG="testing 'pasta file' on sneaky path '${sneaky_name}'"
-    run "$PASTA" file "$text_file" "$sneaky_name"
+    ERROR_MSG="testing 'pasta import' on sneaky path '${sneaky_name}'"
+    run "$PASTA" import "$text_file" "$sneaky_name"
     [[ "$status" -eq 2 ]]
     clean_output
     [[ "$out" =~ "is an invalid pasta name" ]]
@@ -508,7 +745,7 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file works when overwriting" {
+@test "pasta import works when overwriting" {
   pasta_name="overwritten_pasta"
   text_pasta="${PASTA_DIR}/${pasta_name}.txt"
   text_data="old data"
@@ -518,13 +755,13 @@ teardown() {
 
   # Test overwriting text with text.
   # Check behavior when no is given.
-  run bash -c "echo n | ${PASTA} file '${new_text}' ${pasta_name}"
+  run bash -c "echo n | ${PASTA} import '${new_text}' ${pasta_name}"
   [[ "$status" -eq 3 ]]
   # Data should be the same.
   [[ -f "$text_pasta" ]]
   [[ "$text_data" == "$(< "$text_pasta")" ]]
   # Check behavior when yes is given.
-  run bash -c "echo y | ${PASTA} file '${new_text}' ${pasta_name}"
+  run bash -c "echo y | ${PASTA} import '${new_text}' ${pasta_name}"
   [[ "$status" -eq 0 ]]
   # Data should be updated.
   [[ -f "$text_pasta" ]]
@@ -535,7 +772,7 @@ teardown() {
   image_pasta="${PASTA_DIR}/${pasta_name}.png"
   create_white_img "${image_file}" 32 32
   # Check behavior when no is given.
-  run bash -c "echo n | ${PASTA} file '${image_file}' ${pasta_name}"
+  run bash -c "echo n | ${PASTA} import '${image_file}' ${pasta_name}"
   # User rejected overwriting, so data should still be text.
   [[ "$status" -eq 3 ]]
   # Data should be the same.
@@ -543,7 +780,7 @@ teardown() {
   [[ ! -f "$image_pasta" ]]
   diff "$text_pasta" "$new_text"
   # Check behavior when yes is given.
-  run bash -c "echo y | ${PASTA} file '${image_file}' ${pasta_name}"
+  run bash -c "echo y | ${PASTA} import '${image_file}' ${pasta_name}"
   [[ "$status" -eq 0 ]]
   # Data should be updated.
   [[ -f "$image_pasta" ]]
@@ -555,14 +792,14 @@ teardown() {
   create_white_img "${image_file_2}" 30 34
   $copy_img "$image_file_2"
   # Check behavior when no is given.
-  run bash -c "echo n | ${PASTA} file '${image_file_2}' ${pasta_name}"
+  run bash -c "echo n | ${PASTA} import '${image_file_2}' ${pasta_name}"
   # User rejected overwriting, so data should still be the same.
   [[ "$status" -eq 3 ]]
   # Data should be the same.
   [[ -f "$image_pasta" ]]
   diff "$image_pasta" "$image_file"
   # Check behavior when yes is given.
-  run bash -c "echo y | ${PASTA} file '${image_file_2}' ${pasta_name}"
+  run bash -c "echo y | ${PASTA} import '${image_file_2}' ${pasta_name}"
   [[ "$status" -eq 0 ]]
   # Data should be updated.
   [[ -f "$image_pasta" ]]
@@ -570,7 +807,7 @@ teardown() {
 
   # Test overwriting image with text.
   # Check behavior when no is given.
-  run bash -c "echo n | ${PASTA} file '${new_text}' ${pasta_name}"
+  run bash -c "echo n | ${PASTA} import '${new_text}' ${pasta_name}"
   # User rejected overwriting, so data should still be image.
   [[ "$status" -eq 3 ]]
   # data Should be the same.
@@ -578,7 +815,7 @@ teardown() {
   [[ ! -f "$text_pasta" ]]
   diff "$image_pasta" "$image_file_2"
   # Check behavior when yes is given.
-  run bash -c "echo y | ${PASTA} file '${new_text}' ${pasta_name}"
+  run bash -c "echo y | ${PASTA} import '${new_text}' ${pasta_name}"
   [[ "$status" -eq 0 ]]
   # Data should be updated.
   [[ -f "$text_pasta" ]]
@@ -587,7 +824,7 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta file with the force flag doesn't ask for overwrite" {
+@test "pasta import with the force flag doesn't ask for overwrite" {
   text_file="${TMP_DIR}/textfile.txt"
   echo "new data" > "$text_file"
   pasta_name="pasta_name"
@@ -596,7 +833,7 @@ teardown() {
   do
     echo "old data" > "$pasta_file"
     # Echo no to pasta which should be ignored.
-    run bash -c "echo n | ${PASTA} file ${force_flag} '${text_file}' $pasta_name"
+    run bash -c "echo n | ${PASTA} import ${force_flag} '${text_file}' $pasta_name"
     [[ "$status" -eq 0 ]]
     [[ -f "$pasta_file" ]]
     diff "$pasta_file" "$text_file"
@@ -605,102 +842,94 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta load loads text on the clipboard" {
-  pasta_name="textdata"
-  text_file="${PASTA_DIR}/${pasta_name}.txt"
-  echo "text data" > "$text_file"
-
-  for load_cmd in "" "load"
-  do
-    ERROR_MSG="testing 'pasta ${load_cmd}'"
-    run "$PASTA" $load_cmd "$pasta_name"
-    [[ "$status" -eq 0 ]]
-    pasted_file="${TMP_DIR}/pasted.txt"
-    $paste_text >"$pasted_file"
-    diff "$text_file" "$pasted_file"
-  done
+@test "pasta export copies the text pasta to the given location" {
   CLEANUP=1
-}
-
-@test "pasta load loads images on the clipboard" {
-  pasta_name="imagedata"
-  image_file="${PASTA_DIR}/${pasta_name}.png"
-  create_white_img "$image_file"
-
-  for load_cmd in "" "load"
-  do
-    ERROR_MSG="testing 'pasta ${load_cmd}'"
-    run "$PASTA" $load_cmd "$pasta_name"
-    [[ "$status" -eq 0 ]]
-    pasted_file="${TMP_DIR}/pasted.png"
-    $paste_text >"$pasted_file"
-    diff "$image_file" "$pasted_file"
-  done
-  CLEANUP=1
-}
-
-@test "pasta load has priority over pasta list when load is specified" {
-  pasta_name="textdata"
-  overloaded_dir="${PASTA_DIR}/${pasta_name}"
-  text_file="${overloaded_dir}.txt"
-  echo "text_data" > "$text_file"
-  other_pasta_name="extra_name"
-  mkdir "$overloaded_dir"
-  echo "more data" > "${overloaded_dir}/${other_pasta_name}.txt"
-
-  for load_cmd in "" "load"
-  do
-    ERROR_MSG="testing 'pasta ${load_cmd}'"
-    run "$PASTA" $load_cmd "$pasta_name"
-    [[ "$status" -eq 0 ]]
-    clean_output
-    [[ "$out" =~ ^"Loaded" ]]
-    [[ ! "$out" =~ "$other_pasta_name" ]]
-    pasted_file="${TMP_DIR}/pasted.txt"
-    $paste_text >"$pasted_file"
-    diff "$text_file" "$pasted_file"
-  done
-  CLEANUP=1
-}
-
-@test "pasta load accepts names with slashes and spaces" {
-  pasta_name="load/slashes/and/spaces in/name"
-  text_file="${PASTA_DIR}/${pasta_name}.txt"
-  ensure_parent_dirs "$text_file"
-  echo "text data" > "$text_file"
-
-  run "$PASTA" load "$pasta_name"
+  skip "pasta export has not been implemented yet"
+  pasta_name="text_pasta"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo "something" > "$pasta_file"
+  text_file="${TMP_DIR}/textfile.out"
+  run "$PASTA" export "$pasta_name" "$text_file"
   [[ "$status" -eq 0 ]]
-  pasted_file="${TMP_DIR}/pasted.txt"
-  $paste_text >"$pasted_file"
-  diff "$text_file" "$pasted_file"
+  [[ -f "$text_file" ]]
+  diff "$text_file" "$pasta_file"
   CLEANUP=1
 }
 
-@test "pasta load rejects sneaky directory traversal names" {
-  setup_sneaky_paths_test read
+@test "pasta export copies the image pasta to the given location" {
+  CLEANUP=1
+  skip "pasta export has not been implemented yet"
+  pasta_name="img_pasta"
+  pasta_file="${PASTA_DIR}/${pasta_name}.png"
+  create_white_img "$pasta_file"
+  image_file="${TMP_DIR}/image.png"
+  run "$PASTA" export "$pasta_name" "$image_file"
+  [[ "$status" -eq 0 ]]
+  [[ -f "$image_file" ]]
+  diff "$image_file" "$pasta_file"
+  CLEANUP=1
+}
 
-  for load_cmd in "" "load"
+@test "pasta export converts the image pasta to jpeg" {
+  CLEANUP=1
+  skip "pasta export has not been implemented yet"
+  pasta_name="img_pasta"
+  pasta_file="${PASTA_DIR}/${pasta_name}.png"
+  create_white_img "$pasta_file"
+  image_file="${TMP_DIR}/image.jpg"
+  run "$PASTA" export "$pasta_name" "$image_file"
+  [[ "$status" -eq 0 ]]
+  [[ -f "$image_file" ]]
+  [[ "$(file --mime-type -b "$image_file")" == "image/jpeg" ]]
+  imgdiff "$image_file" "$pasta_file"
+  CLEANUP=1
+}
+
+@test "pasta export accepts names with slashes and spaces" {
+  CLEANUP=1
+  skip "pasta export has not been implemented yet"
+  pasta_name="export/slashes/and/spaces/in name"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  ensure_parent_dirs "$pasta_file"
+  echo "some data" > "$pasta_file"
+  text_file="${TMP_DIR}/textfile.out"
+  run "$PASTA" export "$pasta_name" "$(realpath --relative-to=. "$text_file")"
+  [[ "$status" -eq 0 ]]
+  [[ -f "$text_file" ]]
+  diff "$text_file" "$pasta_file"
+  CLEANUP=1
+}
+
+@test "pasta export fails when given too few arguments" {
+  CLEANUP=1
+  skip "pasta export has not been implemented yet"
+  pasta_name="a_pasta"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo "text data" >"$pasta_file"
+  for force_flag in "" "-f" "--force"
   do
-    for sneaky_name in "${sneaky_names[@]}"
+    for first_arg in "" "$pasta_file"
     do
-      ERROR_MSG="testing 'pasta ${load_cmd}' on sneaky path '${sneaky_name}'"
-      run "$PASTA" $load_cmd "$sneaky_name"
+      ERROR_MSG="testing 'pasta export ${force_flag} ${first_arg}'"
+      # Check when no pasta name is given.
+      run "$PASTA" export $force_flag $first_arg
       [[ "$status" -eq 2 ]]
       clean_output
-      [[ "$out" =~ "is an invalid pasta name" ]]
-      clipboard_is_empty
+      [[ "$out" =~ ^"Usage: ".*" export " ]]
     done
   done
   CLEANUP=1
 }
 
-@test "pasta load fails when a nonexistent pasta is specified" {
-  run "$PASTA" nonexistent_pasta
+@test "pasta export fails when given a nonexistent pasta" {
+  CLEANUP=1
+  skip "pasta export has not been implemented yet"
+  out_file="${TMP_DIR}/data.out"
+  run "$PASTA" export nonexistent "$out_file"
   [[ "$status" -eq 2 ]]
   clean_output
   [[ "$out" =~ "does not exist" ]]
-  clipboard_is_empty
+  [[ ! -f "$out_file" ]]
   CLEANUP=1
 }
 
@@ -760,7 +989,7 @@ teardown() {
 
 @test "pasta show accepts names with slashes and spaces" {
   text_data="my data"
-  pasta_name="show/slashes/and/spaces/in name"
+  pasta_name="show slashes/and spaces/in/name"
   pasta_file="${PASTA_DIR}/${pasta_name}.txt"
   ensure_parent_dirs "$pasta_file"
   echo "$text_data" > "$pasta_file"
@@ -1615,7 +1844,7 @@ teardown() {
     run "$PASTA" "$rename_cmd" "$source_name" "$dest_name"
     [[ "$status" -eq 0 ]]
     clean_output
-    [[ "$out" =~ ^"Text pasta".*"renamed to" ]]
+    [[ "$out" =~ ^"Text pasta".*"moved to" ]]
     [[ ! -f "$source_file" ]]
     dest_file="${PASTA_DIR}/${dest_name}.txt"
     [[ -f "$dest_file" ]]
@@ -1638,7 +1867,7 @@ teardown() {
     run "$PASTA" "$rename_cmd" "$source_name" "$dest_name"
     [[ "$status" -eq 0 ]]
     clean_output
-    [[ "$out" =~ ^"Image pasta".*"renamed to" ]]
+    [[ "$out" =~ ^"Image pasta".*"moved to" ]]
     [[ ! -f "$source_file" ]]
     dest_file="${PASTA_DIR}/${dest_name}.png"
     [[ -f "$dest_file" ]]
@@ -1661,7 +1890,7 @@ teardown() {
     run "$PASTA" "$rename_cmd" "$source_name" $dest_name
     [[ "$status" -eq 0 ]]
     clean_output
-    [[ "$out" =~ ^"Text pasta".*"renamed to" ]]
+    [[ "$out" =~ ^"Text pasta".*"moved to" ]]
     [[ ! -f "$source_file" ]]
     [[ ! -d "$(dirname "$source_file")" ]]
     dest_file="${PASTA_DIR}/${dest_name}.txt"
@@ -1687,7 +1916,7 @@ teardown() {
     run "$PASTA" "$rename_cmd" "$source_name" "$dest_name"
     [[ "$status" -eq 0 ]]
     clean_output
-    [[ "$out" =~ ^"Text pasta".*"renamed to" ]]
+    [[ "$out" =~ ^"Text pasta".*"moved to" ]]
     [[ ! -f "$source_file" ]]
     dest_file="${PASTA_DIR}/${dest_name}/${source_name}.txt"
     [[ -f "$dest_file" ]]
@@ -1713,7 +1942,7 @@ teardown() {
   run bash -c "echo n | ${PASTA} rename '${source_name}' ${dest_name}"
   [[ "$status" -eq 0 ]]
   clean_output
-  [[ "$out" =~ ^"Directory".*"renamed to" ]]
+  [[ "$out" =~ ^"Directory".*"moved to" ]]
   [[ ! -d "$source_dir" ]]
   # Check that the new data was copied over.
   dest_file="${PASTA_DIR}/${dest_name}/${inner_name}.txt"
@@ -2086,133 +2315,5 @@ teardown() {
   [[ "$status" -eq 2 ]]
   clean_output
   [[ "$out" =~ "does not exist" ]]
-  CLEANUP=1
-}
-
-@test "pasta edit calls the editor" {
-  # Replace the default editor with cp to simulate writing something to the file.
-  export EDITOR="cp ${PASTA_SETTINGS}"
-  pasta_name="edit_test"
-  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
-  echo "existing data" > "$pasta_file"
-  run "$PASTA" edit $pasta_name
-  [[ "$status" -eq 0 ]]
-  [[ -f "$pasta_file" ]]
-  diff -q "$pasta_file" "$PASTA_SETTINGS"
-  CLEANUP=1
-}
-
-@test "pasta edit calls the default editor when EDITOR is not set" {
-  mock_command vi
-  pasta_name="edit_test"
-  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
-  echo "existing data" > "$pasta_file"
-  run "$PASTA" edit $pasta_name
-  [[ "$status" -eq 0 ]]
-  [[ -f "$pasta_file" ]]
-  mock_called vi vi_arg
-  [[ "$vi_arg" -ef "$pasta_file" ]]
-  CLEANUP=1
-}
-
-@test "pasta edit accepts names with slashes and spaces" {
-  # Replace the default editor with cp to simulate writing something to the file.
-  export EDITOR="cp ${PASTA_SETTINGS}"
-  pasta_name='edit/slashes/and spaces/in name'
-  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
-  ensure_parent_dirs "$pasta_file"
-  echo "existing data" > "$pasta_file"
-  run "$PASTA" edit $pasta_name
-  [[ "$status" -eq 0 ]]
-  [[ -f "$pasta_file" ]]
-  diff "$PASTA_SETTINGS" "$pasta_file"
-  CLEANUP=1
-}
-
-@test "pasta edit deletes a pasta if the editor makes it empty" {
-  # Replace the default editor with truncate to simulate deleting the contents of the file
-  export EDITOR="truncate -s0"
-  pasta_name="pasta_name"
-  echo "existing data" > "${PASTA_DIR}/${pasta_name}.txt"
-  run "$PASTA" edit "$pasta_name"
-  [[ "$status" -eq 0 ]]
-  clean_output
-  [[ "$out" =~ ^"Deleted empty text pasta" ]]
-  check_no_pastas
-  CLEANUP=1
-}
-
-@test "pasta edit deletes a pasta and empty parent directories if the edit makes it empty" {
-  # Replace the default editor with truncate to simulate deleting the contents of the file
-  export EDITOR="truncate -s0"
-  pasta_name="dir/pasta_name"
-  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
-  ensure_parent_dirs "$pasta_file"
-  echo "existing data" > "$pasta_file"
-  run "$PASTA" edit "$pasta_name"
-  [[ "$status" -eq 0 ]]
-  clean_output
-  [[ "$out" =~ ^"Deleted empty text pasta" ]]
-  check_no_pastas
-  CLEANUP=1
-}
-
-@test "pasta edit rejects sneaky directory traversal names" {
-  setup_sneaky_paths_test read
-  mock_command vi
-  for sneaky_name in "${sneaky_names[@]}"
-  do
-    ERROR_MSG="testing 'pasta insert' on sneaky path '${sneaky_name}'"
-    run "$PASTA" edit "$sneaky_name"
-    [[ "$status" -eq 2 ]]
-    clean_output
-    [[ "$out" =~ "is an invalid pasta name" ]]
-    ! mock_called vi
-  done
-  CLEANUP=1
-}
-
-@test "pasta edit fails with no arguments" {
-  mock_command vi
-  run "$PASTA" edit
-  [[ "$status" -eq 2 ]]
-  clean_output
-  [[ "$out" =~ ^"Usage: ".*" edit " ]]
-  ! mock_called vi
-  check_no_pastas
-  CLEANUP=1
-}
-
-@test "pasta edit fails when a nonexistent pasta is specified" {
-  mock_command vi
-  run "$PASTA" edit nonexistent
-  [[ "$status" -eq 2 ]]
-  clean_output
-  [[ "$out" =~ "does not exist" ]]
-  ! mock_called vi
-  check_no_pastas
-  CLEANUP=1
-}
-
-@test "pasta edit fails when given a non-text pasta" {
-  mock_command vi
-  img_pasta="image_pasta"
-  img_file="${PASTA_DIR}/${img_pasta}.png"
-  create_white_img "$img_file"
-  run "$PASTA" edit "$img_pasta"
-  [[ "$status" -eq 2 ]]
-  clean_output
-  [[ "$out" =~ ^"Error: cannot edit image pasta" ]]
-  ! mock_called vi
-
-  dir_name="my_dir"
-  pasta_dir="${PASTA_DIR}/${dir_name}"
-  mkdir "$pasta_dir"
-  echo data > "${pasta_dir}/text_pasta.txt"
-  run "$PASTA" edit "$dir_name"
-  [[ "$status" -eq 2 ]]
-  clean_output
-  [[ "$out" =~ ^"Error: cannot edit directory" ]]
-  ! mock_called vi
   CLEANUP=1
 }

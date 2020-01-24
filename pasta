@@ -34,11 +34,12 @@ _pasta_usage() {
   case "$cmd" in
     init) echo "${prefix} init [PASTA_DIRECTORY]" ;;
     save) echo "${prefix} save [--force,-f] PASTA_NAME" ;;
-    insert) echo "${prefix} insert [--force,-f] PASTA_NAME" ;;
-    file) echo "${prefix} file [--force,-f] FILE PASTA_NAME" ;;
     load) echo "${prefix} [load] PASTA_NAME" ;;
-    paste) echo "${prefix} paste [--force,-f] PASTA_NAME FILE" ;;
-    inspect|show) echo "${prefix} inspect|show PASTA_NAME" ;;
+    insert) echo "${prefix} insert [--force,-f] PASTA_NAME" ;;
+    edit) echo "${prefix} edit PASTA_NAME" ;;
+    import) echo "${prefix} import [--recursive,-r] [--force,-f] PATH [PASTA_NAME]" ;;
+    export) echo "${prefix} export [--recursive,-r] [--compressed,-c] [--force,-f] --all,-a|PASTA_NAME PATH" ;;
+    show|inspect) echo "${prefix} show|inspect PASTA_NAME" ;;
     list|ls) echo "${prefix} [list|ls] [DIRECTORY]" ;;
     find) echo "${prefix} find PASTA_NAMES" ;;
     grep) echo "${prefix} grep SEARCH_STRING" ;;
@@ -46,10 +47,9 @@ _pasta_usage() {
     cp) echo "${prefix} cp [--verbose,-v] [--recursive,-r] [--force,-f] SOURCE_PASTA DEST_PASTA" ;;
     rename|mv) echo "${prefix} rename|mv [--verbose,-v] [--force,-f] SOURCE_PASTA DEST_PASTA" ;;
     delete|remove|rm) echo "${prefix} delete|remove|rm [--recursive,-r] PASTA_NAMES" ;;
-    edit) echo "${prefix} edit PASTA_NAME" ;;
-    help|usage) echo "${prefix} help|usage" ;;
+    help|usage) echo "${prefix} help|usage [COMMAND]" ;;
     version) echo "${prefix} version" ;;
-    *) echoerr "Error: _pasta_usage received unknown command ${cmd}"; exit 1 ;;
+    *) quit "Error: unknown command '${cmd}'" ;;
   esac
   $full || return 0
   prefix="       "
@@ -58,11 +58,42 @@ _pasta_usage() {
       echo "${prefix} Initialize the copypasta storage."
       echo "${prefix} If DIRECTORY is not provided, it will be initialized to ~/.pastas."
       ;;
-    save) echo "${prefix} Save the data on the clipboard as PASTA_NAME." ;;
-    insert) echo "${prefix} Open a text editor to write a copypasta." ;;
-    file) echo "${prefix} Save the file as PASTA_NAME." ;;
+    save)
+      echo "${prefix} Save the data on the clipboard as PASTA_NAME. Prompts before"
+      echo "${prefix} overwriting an existing copypasta unless forced."
+      ;;
     load) echo "${prefix} Place the existing copypasta on the clipboard." ;;
-    paste) echo "${prefix} Paste the copypasta to a file." ;;
+    insert)
+      echo "${prefix} Open a text editor to write a copypasta. Prompts before overwriting"
+      echo "${prefix} the existing pasta unless forced."
+      ;;
+    edit) echo "${prefix} Edit the copypasta." ;;
+    import)
+      echo "${prefix} Import the data at the PATH as PASTA_NAME. If PASTA_NAME is not given,"
+      echo "${prefix} it is placed at the root of the pasta directory and the name is"
+      echo "${prefix} assumed to be the name of the file before the file extension. Prompts"
+      echo "${prefix} before overwriting the existing pasta unless forced."
+      echo "${prefix} There are 4 main cases for files located at the PATH."
+      echo "${prefix}   1. Tarballs ending in '.tar.gz'. These are files produced by the"
+      echo "${prefix}    \`export\` command with the --compressed flag."
+      echo "${prefix}   2. Text files (determined by the detected MIME type)."
+      echo "${prefix}   3. Image files (also determined by the detected MIME type)."
+      echo "${prefix}   4. Directories. The --recursive flag must be specified. The text and"
+      echo "${prefix}      image files (as determined from above) within the directory will"
+      echo "${prefix}      be imported. Their names will be the names of their files under"
+      echo "${prefix}      the directory specified by the PASTA_NAME (or otherwise dumped in"
+      echo "${prefix}      the root directory)."
+      ;;
+    export)
+      echo "${prefix} Export the copypasta with the PASTA_NAME to the PATH. If --all is"
+      echo "${prefix} given, no PASTA_NAME is needed, and the entire pasta directory will be"
+      echo "${prefix} exported. If the copypasta is a single text or image copypasta, it"
+      echo "${prefix} will be copied to the given path. If it is a directory, --recursive is"
+      echo "${prefix} required (--all implies --recursive), and the entire directory will be"
+      echo "${prefix} copied to the path. If --compressed is given, the data is instead"
+      echo "${prefix} written to a .tar.gz file at the given path. Promptes before"
+      echo "${prefix} overwriting an existing file unless forced."
+      ;;
     inspect|show) echo "${prefix} Show the copypasta." ;;
     list|ls) echo "${prefix} List copypastas." ;;
     find) echo "${prefix} List copypastas which match the pasta names." ;;
@@ -71,17 +102,25 @@ _pasta_usage() {
     cp) echo "${prefix} Create a copy of SOURCE_PASTA named DEST_PASTA." ;;
     rename|mv) echo "${prefix} Rename SOURCE_PASTA to DEST_PASTA." ;;
     delete|remove|rm) echo "${prefix} Delete the given copypasta(s)." ;;
-    edit) echo "${prefix} Edit the copypasta." ;;
-    help|usage) echo "${prefix} Display this help message." ;;
+    help|usage)
+      echo "${prefix} If COMMAND is specified, display the help message for that command."
+      echo "${prefix} Otherwise, display this help message."
+      ;;
     version) echo "${prefix} Display version information." ;;
   esac
 }
 
 pasta_usage() {
+  [[ "$#" -le 1 ]] || usagequit usage
+  if [[ "$#" -eq 1 ]]
+  then
+    _pasta_usage "$1" full
+    return 0
+  fi
   pasta_version
   echo
   echo "Usage:"
-  for cmd in "init" "save" "insert" "file" "load" "paste" "inspect" "list" "find" "grep" "alias" "cp" "rename" "delete" "edit" "help" "version"
+  for cmd in "init" "save" "load" "insert" "edit" "import" "export" "inspect" "list" "find" "grep" "alias" "cp" "rename" "delete" "help" "version"
   do
     _pasta_usage "$cmd" full
   done
@@ -124,43 +163,6 @@ pasta_save() {
   fi
 }
 
-pasta_insert() {
-  local force
-  case "${1:-}" in
-    -f|--force) shift; force="force" ;;
-    --) shift ;;
-    -*) flagquit "$1" ;;
-  esac
-  [[ "$#" -ge 1 ]] || usagequit insert
-  local pasta_name="$*"
-  check_pasta_name "$pasta_name" write "${force:-}"
-  local temp_file
-  create_temp_file temp_file
-  # Remove the temporary file to detect a difference between exiting the
-  # editor without doing anything and choosing to write an empty file
-  rm "$temp_file"
-  ${EDITOR:-vi} "$temp_file"
-  [[ -f "$temp_file" ]] || userquit "Pasta not created."
-  create_pasta_from_file "$temp_file" text "$pasta_name"
-}
-
-pasta_file() {
-  local force
-  case "${1:-}" in
-    -f|--force) shift; force="force" ;;
-    --) shift ;;
-    -*) flagquit "$1" ;;
-  esac
-  [[ $# -ge 2 ]] || usagequit file
-  local file="$1"
-  local pasta_name="${*:2}"
-  [[ -f "$file" ]] || { [[ -d "$file" ]] && quit "Error: ${file} is a directory"; } || quit "Error: no file '${file}' exists"
-  check_pasta_name "$pasta_name" write "${force:-}"
-  local mimetype="$(file --mime-type -b "$file")"
-  local ftype="$(cut -d'/' -f1 <<< "$mimetype")"
-  create_pasta_from_file "$file" "$ftype" "$pasta_name" "$mimetype"
-}
-
 pasta_load() {
   if [[ "$#" -eq 0 ]]
   then
@@ -186,7 +188,59 @@ pasta_load_file() {
   echo "Loaded ${pasta_type} pasta '${pasta_name}' to the clipboard."
 }
 
-pasta_pastefile() {
+pasta_insert() {
+  local force
+  case "${1:-}" in
+    -f|--force) shift; force="force" ;;
+    --) shift ;;
+    -*) flagquit "$1" ;;
+  esac
+  [[ "$#" -ge 1 ]] || usagequit insert
+  local pasta_name="$*"
+  check_pasta_name "$pasta_name" write "${force:-}"
+  local temp_file
+  create_temp_file temp_file
+  # Remove the temporary file to detect a difference between exiting the
+  # editor without doing anything and choosing to write an empty file
+  rm "$temp_file"
+  ${EDITOR:-vi} "$temp_file"
+  [[ -f "$temp_file" ]] || userquit "Pasta not created."
+  create_pasta_from_file "$temp_file" text "$pasta_name"
+}
+
+pasta_edit() {
+  [[ "$#" -ge 1 ]] || usagequit edit
+  local pasta_name="$*"
+  local pasta_type pasta_file
+  check_pasta_name "$pasta_name" read pasta_type pasta_file
+  case "$pasta_type" in
+    text) ;;
+    image) quit "Error: cannot edit image pasta '${pasta_name}'. Please use your favorite image editing software on the file '${pasta_file}'" ;;
+    dir) quit "Error: cannot edit directory '${pasta_name}'" ;;
+    *) echoerr "Error: check_pasta_name returned unknown type '${pasta_type}'"; exit 1 ;;
+  esac
+  ${EDITOR:-vi} "$pasta_file"
+  [[ -s "$pasta_file" ]] || rm "$pasta_file" && remove_empty_ancestors "$pasta_file" && echo "Deleted empty text pasta '${pasta_name}'"
+}
+
+pasta_import() {
+  local force
+  case "${1:-}" in
+    -f|--force) shift; force="force" ;;
+    --) shift ;;
+    -*) flagquit "$1" ;;
+  esac
+  [[ $# -ge 2 ]] || usagequit import
+  local file="$1"
+  local pasta_name="${*:2}"
+  [[ -f "$file" ]] || { [[ -d "$file" ]] && quit "Error: ${file} is a directory"; } || quit "Error: no file '${file}' exists"
+  check_pasta_name "$pasta_name" write "${force:-}"
+  local mimetype="$(file --mime-type -b "$file")"
+  local ftype="$(cut -d'/' -f1 <<< "$mimetype")"
+  create_pasta_from_file "$file" "$ftype" "$pasta_name" "$mimetype"
+}
+
+pasta_export() {
   not_implemented
 }
 
@@ -331,7 +385,7 @@ pasta_move() {
     cp) op="copied" ;;
     mv)
       remove_empty_ancestors "$source_file"
-      op="renamed"
+      op="moved"
       ;;
   esac
   echo "${formatted_source_type} '${source_pasta}' ${op} to '${dest_pasta}'"
@@ -363,21 +417,6 @@ pasta_delete() {
     remove_empty_ancestors "$pasta_file"
     echo "Deleted ${desc} '${pasta_name}'"
   done
-}
-
-pasta_edit() {
-  [[ "$#" -ge 1 ]] || usagequit edit
-  local pasta_name="$*"
-  local pasta_type pasta_file
-  check_pasta_name "$pasta_name" read pasta_type pasta_file
-  case "$pasta_type" in
-    text) ;;
-    image) quit "Error: cannot edit image pasta '${pasta_name}'. Please use your favorite image editing software on the file '${pasta_file}'" ;;
-    dir) quit "Error: cannot edit directory '${pasta_name}'" ;;
-    *) echoerr "Error: check_pasta_name returned unknown type '${pasta_type}'"; exit 1 ;;
-  esac
-  ${EDITOR:-vi} "$pasta_file"
-  [[ -s "$pasta_file" ]] || rm "$pasta_file" && remove_empty_ancestors "$pasta_file" && echo "Deleted empty text pasta '${pasta_name}'"
 }
 
 # END command functions
@@ -623,18 +662,18 @@ PASTA_SETTINGS="${PASTA_SETTINGS:-"${HOME}/.pasta"}"
 case "$COMMAND" in
   init) shift; pasta_init "$@" ;;
   save) shift; pasta_save "$@" ;;
-  insert) shift; pasta_insert "$@" ;;
-  file) shift; pasta_file "$@" ;;
   load) shift; pasta_load "$@" ;;
-  paste) shift; pasta_pastefile "$@" ;;
+  insert) shift; pasta_insert "$@" ;;
+  edit) shift; pasta_edit "$@" ;;
+  import) shift; pasta_import "$@" ;;
+  export) shift; pasta_export "$@" ;;
   show|inspect) shift; pasta_show "$@" ;;
   list|ls) shift; pasta_list "$@" ;;
   find|search) shift; pasta_find "$@" ;;
   grep) shift; pasta_grep "$@" ;;
   alias|ln|cp|rename|mv) shift; pasta_move "$@" ;;
   delete|remove|rm) shift; pasta_delete "$@" ;;
-  edit) shift; pasta_edit "$@" ;;
-  help|--help|usage) shift; pasta_usage ;;
+  help|-h|--help|usage) shift; pasta_usage "$@" ;;
   version|--version) shift; pasta_version ;;
   *) pasta_load "$@" ;;
 esac
