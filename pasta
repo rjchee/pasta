@@ -224,20 +224,31 @@ pasta_edit() {
 }
 
 pasta_import() {
-  local force
+  local force recursive=""
   case "${1:-}" in
     -f|--force) shift; force="force" ;;
+    -r|--recursive) shift; recursive="-r" ;;
     --) shift ;;
     -*) flagquit "$1" ;;
   esac
-  [[ $# -ge 2 ]] || usagequit import
+  [[ $# -ge 1 ]] || usagequit import
   local file="$1"
   local pasta_name="${*:2}"
-  [[ -f "$file" ]] || { [[ -d "$file" ]] && quit "Error: ${file} is a directory"; } || quit "Error: no file '${file}' exists"
-  check_pasta_name "$pasta_name" write "${force:-}"
-  local mimetype="$(file --mime-type -b "$file")"
-  local ftype="$(cut -d'/' -f1 <<< "$mimetype")"
-  create_pasta_from_file "$file" "$ftype" "$pasta_name" "$mimetype"
+  # Infer the pasta name from the name of the file without the extension (if any).
+  [[ -n "$pasta_name" ]] || pasta_name="$(basename "$file")" && pasta_name="${pasta_name%.*}"
+  if [[ -f "$file" ]]
+  then
+    check_pasta_name "$pasta_name" write "${force:-}"
+    local mimetype="$(file --mime-type -b "$file")"
+    local ftype="$(cut -d'/' -f1 <<< "$mimetype")"
+    create_pasta_from_file "$file" "$ftype" "$pasta_name" "$mimetype"
+  elif [[ -d "$file" ]]
+  then
+    [[ -n "$recursive" ]] || quit "Error: '${file}' is a directory. Please use the --recursive flag"
+    # TODO: do this
+  else
+    quit "Error: no file '${file}' exists"
+  fi
 }
 
 pasta_export() {

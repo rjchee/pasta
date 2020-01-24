@@ -110,7 +110,7 @@ setup_sneaky_paths_test() {
 # Usage: mock_command COMMAND_NAME [SIDE_EFFECT]
 mock_command() {
   local command_name="$1"
-  local side_effect="${2:-true}"
+  local side_effect="${2:-}"
   local tmp_bin="${TMP_DIR}/bin"
   [[ -d "$tmp_bin" ]] || mkdir -p "$tmp_bin" && export PATH="${tmp_bin}:$PATH"
   local tmp_cmd="${tmp_bin}/$command_name"
