@@ -642,13 +642,51 @@ teardown() {
 }
 
 @test "pasta import imports a directory" {
+  dir_name="my_dir"
+  external_dir="${TMP_DIR}/${dir_name}"
+  mkdir "$external_dir"
+  text_name="my_text"
+  text_file="${external_dir}/${text_name}.txt"
+  echo data > "$text_file"
+  jpg_name="my_jpg"
+  jpg_file="${external_dir}/${jpg_name}.jpg"
+  create_white_img "$jpg_file" 15 15
+  inner_dir_name="inner_dir"
+  inner_dir="${external_dir}/${inner_dir_name}"
+  mkdir "${inner_dir}"
+  png_name="${inner_dir_name}/my_png"
+  png_file="${external_dir}/${png_name}.png"
+  create_white_img "$png_file" 12 12
+
+  new_dir_name="imported_dir"
+  pasta_new_dir="${PASTA_DIR}/${new_dir_name}"
+  pasta_text_file="${pasta_new_dir}/${text_name}.txt"
+  pasta_jpg_file="${pasta_new_dir}/${jpg_name}.png"
+  pasta_dir_path="${pasta_new_dir}/${inner_dir_name}"
+  pasta_png_file="${pasta_new_dir}/${png_name}.png"
+  for recurse_flag in "-r" "--recursive"
+  do
+    ERROR_MSG="testing 'pasta import ${recurse_flag}'"
+    run "$PASTA" import "$recurse_flag" "$external_dir" "$new_dir_name"
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$out" =~ "Created text pasta" ]]
+    [[ -f "$pasta_text_file" ]]
+    diff "$pasta_text_file" "$text_file"
+    [[ "$out" =~ "Created image pasta".*"Created image pasta" ]]
+    [[ -f "$pasta_jpg_file" ]]
+    imgdiff "$pasta_jpg_file" "$jpg_file"
+    [[ -d "$pasta_dir_path" ]]
+    [[ -f "$pasta_png_file" ]]
+    diff "$pasta_png_file" "$png_file"
+    rm -r "$pasta_new_dir"
+  done
   CLEANUP=1
-  skip "This test has not been implemented yet"
 }
 
 @test "pasta import imports a compressed file" {
   CLEANUP=1
-  skip "This test has not been implemented yet"
+  skip "This functionality has not been implemented yet"
 }
 
 @test "pasta import accepts names with slashes and spaces" {
@@ -668,17 +706,75 @@ teardown() {
   echo "text data" >"$text_file"
   for force_flag in "" "-f" "--force"
   do
-    for text_file in "" "$text_file"
+    for recurse_flag in "" "-r" "--recursive"
     do
-      ERROR_MSG="testing 'pasta import ${force_flag} ${text_file}'"
+      ERROR_MSG="testing 'pasta import ${force_flag} ${recurse_flag}'"
       # Check when no pasta name is given.
-      run "$PASTA" import $force_flag $text_file
+      run "$PASTA" import $force_flag $recurse_flag
       [[ "$status" -eq 2 ]]
       clean_output
       [[ "$out" =~ ^"Usage: ".*" import " ]]
       check_no_pastas
     done
   done
+  CLEANUP=1
+}
+
+@test "pasta import assumes the pasta name from the filename if not specified" {
+  text_name="my_text"
+  text_file="${TMP_DIR}/${text_name}.txt"
+  echo "data" > "$text_file"
+  run "$PASTA" import "$text_file"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Created text pasta" ]]
+  pasta_file="${PASTA_DIR}/${text_name}.txt"
+  [[ -f "$pasta_file" ]]
+  diff "$pasta_file" "$text_file"
+
+  jpg_name="my_jpg"
+  jpg_file="${TMP_DIR}/${jpg_name}.jpg"
+  create_white_img "$jpg_file" 15 15
+  run "$PASTA" import "$jpg_file"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Created image pasta" ]]
+  pasta_file="${PASTA_DIR}/${jpg_name}.png"
+  [[ -f "$pasta_file" ]]
+  imgdiff "$pasta_file" "$jpg_file"
+
+  png_name="my_png"
+  png_file="${TMP_DIR}/${png_name}.png"
+  create_white_img "$png_file" 20 20
+  run "$PASTA" import "$png_file"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Created image pasta" ]]
+  pasta_file="${PASTA_DIR}/${png_name}.png"
+  [[ -f "$pasta_file" ]]
+  diff "$pasta_file" "$png_file"
+
+  no_extension_name="no extension"
+  no_extension_file="${TMP_DIR}/${no_extension_name}"
+  echo "more data" > "$no_extension_file"
+  run "$PASTA" import "$no_extension_file"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Created text pasta" ]]
+  pasta_file="${PASTA_DIR}/${no_extension_name}.txt"
+  [[ -f "$pasta_file" ]]
+  diff "$pasta_file" "$no_extension_file"
+  CLEANUP=1
+}
+
+@test "pasta import fails when given an empty file" {
+  empty_file="${TMP_DIR}/empty.txt"
+  touch "$empty_file"
+  run "$PASTA" import "${empty_file}" empty_pasta
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "is empty" ]]
+  check_no_pastas
   CLEANUP=1
 }
 
@@ -697,6 +793,36 @@ teardown() {
   CLEANUP=1
 }
 
+@test "pasta import rejects unknown file types when importing a directory" {
+  dir_name="directory"
+  dir_path="${TMP_DIR}/$dir_name"
+  mkdir "$dir_path"
+  binary_name="${dir_name}/bytefile"
+  binary_path="${TMP_DIR}/${binary_name}.bin"
+  get_binary_data > "$binary_path"
+  text_name="${dir_name}/textfile"
+  text_path="${TMP_DIR}/${text_name}.txt"
+  echo "some data" > "$text_path"
+  empty_name="${dir_name}/empty"
+  empty_path="${TMP_DIR}/${empty_name}.file"
+  touch "$empty_path"
+  run "$PASTA" import -r "$dir_path"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  # Import should succeed for the text and image files.
+  [[ "$out" =~ "Created text pasta" ]]
+  text_pasta="${PASTA_DIR}/${text_name}.txt"
+  [[ -f "$text_pasta" ]]
+  diff "$text_pasta" "$text_path"
+  [[ "$out" =~ "Error: '${binary_path}' has unknown MIME type" ]]
+  [[ "$out" =~ "Error: '${empty_path}' is empty" ]]
+  rm "$text_pasta"
+  # This should succeed if nothing else was copied into that directory.
+  rmdir "${PASTA_DIR}/$dir_name"
+  check_no_pastas
+  CLEANUP=1
+}
+
 @test "pasta import fails when given a nonexistent file" {
   run "$PASTA" import "${TMP_DIR}/fake_file.txt" pasta_name
   [[ "$status" -eq 2 ]]
@@ -706,24 +832,16 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta import fails when given an empty file" {
-  empty_file="${TMP_DIR}/empty.txt"
-  touch "$empty_file"
-  run "$PASTA" import "${empty_file}" empty_pasta
+@test "pasta import fails when importing a directory without the recursive flag" {
+  dir_name="dir"
+  dir_path="${TMP_DIR}/${dir_name}"
+  dir_file="${dir_path}/file.txt"
+  ensure_parent_dirs "$dir_file"
+  echo "data" > "$dir_file"
+  run "$PASTA" import "$dir_path"
   [[ "$status" -eq 2 ]]
   clean_output
-  [[ "$out" =~ "is empty" ]]
-  check_no_pastas
-  CLEANUP=1
-}
-
-@test "pasta import fails when given a directory" {
-  dir_name="${TMP_DIR}/dir"
-  mkdir "$dir_name"
-  run "$PASTA" import "$dir_name" pasta_name
-  [[ "$status" -eq 2 ]]
-  clean_output
-  [[ "$out" =~ "is a directory" ]]
+  [[ "$out" =~ "is a directory. Please use the --recursive flag"$ ]]
   check_no_pastas
   CLEANUP=1
 }
