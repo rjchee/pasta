@@ -225,30 +225,61 @@ pasta_edit() {
 
 pasta_import() {
   local force recursive=""
-  case "${1:-}" in
-    -f|--force) shift; force="force" ;;
-    -r|--recursive) shift; recursive="-r" ;;
-    --) shift ;;
-    -*) flagquit "$1" ;;
-  esac
+  while true
+  do
+    case "${1:-}" in
+      -f|--force) force="force" ;;
+      -r|--recursive) recursive="recursive" ;;
+      --) shift; break ;;
+      -*) flagquit "$1" ;;
+      # Done with flags
+      *) break ;;
+    esac
+    shift
+  done
   [[ $# -ge 1 ]] || usagequit import
   local file="$1"
   local pasta_name="${*:2}"
   # Infer the pasta name from the name of the file without the extension (if any).
-  [[ -n "$pasta_name" ]] || pasta_name="$(basename "$file")" && pasta_name="${pasta_name%.*}"
+  if [[ -z "$pasta_name" ]]
+  then
+    pasta_name="$(basename "$file")"
+    # remove file extension from filename if it exists and is not a directory
+    [[ -d "$file" ]] || pasta_name="${pasta_name%.*}"
+  fi
   if [[ -f "$file" ]]
   then
     check_pasta_name "$pasta_name" write "${force:-}"
-    local mimetype="$(file --mime-type -b "$file")"
-    local ftype="$(cut -d'/' -f1 <<< "$mimetype")"
-    create_pasta_from_file "$file" "$ftype" "$pasta_name" "$mimetype"
+    pasta_import_file "$file" "$pasta_name"
   elif [[ -d "$file" ]]
   then
     [[ -n "$recursive" ]] || quit "Error: '${file}' is a directory. Please use the --recursive flag"
-    # TODO: do this
+    get_pasta_dir
+    check_pasta_name_safety "$pasta_name"
+    local inner_file inner_pasta_name
+    local retcode=0
+    while read -r inner_file
+    do
+      inner_pasta_name="${pasta_name}/${inner_file%.*}"
+      check_pasta_name "$inner_pasta_name" write "${force:-}"
+      pasta_import_file "${file}/$inner_file" "$inner_pasta_name" "echoerr" || retcode="$?"
+    done < <(find "$file" -type f -exec realpath --relative-to="$file" {} \;)
+    # Need to use process substitution because the while loop modifies the
+    # retcode variable so it can't be run in a subshell. I originally had it on
+    # the right side of a pipe, which bash automatically runs in a subshell.
+    return "$retcode"
   else
     quit "Error: no file '${file}' exists"
   fi
+}
+
+pasta_import_file() {
+  local file="$1"
+  local pasta_name="$2"
+  local error_handler="${3:-}"
+  local mimetype="$(file --mime-type -b "$file")"
+  local ftype="$(cut -d'/' -f1 <<< "$mimetype")"
+  create_pasta_from_file "$file" "$ftype" "$pasta_name" "$mimetype" $error_handler
 }
 
 pasta_export() {
@@ -601,7 +632,7 @@ remove_empty_ancestors() {
 }
 
 # Creates a pasta file from an existing file.
-# Usage: create_pasta_from_file FILE image_or_text PASTA_NAME [DETECTED_MIME_TYPE]
+# Usage: create_pasta_from_file FILE image_or_text PASTA_NAME [DETECTED_MIME_TYPE] [error_handler]
 create_pasta_from_file() {
   local source_file="$1"
   local file_type="$2"
@@ -609,15 +640,19 @@ create_pasta_from_file() {
   local pasta_file="${PASTA_DIR}/${pasta_name}"
   # If a previous function already did the work to detect the file type, no need to detect it again.
   local detected_type="${4:-$(file --mime-type -b "$source_file")}"
+  # Command which accepts the error message as an argument. By default, it's to quit.
+  local error_handler="${5:-quit}"
   if [[ "$detected_type" == "inode/x-empty" ]]
   then
-    quit "Error: ${source_file} is empty"
+    $error_handler "Error: '${source_file}' is empty"
+    return 2
   elif [[ ! "$detected_type" =~ ^text ]] && [[ ! "$detected_type" =~ ^image ]]
   then
-    quit "Error: unknown MIME type $detected_type"
+    $error_handler "Error: '${source_file}' has unknown MIME type $detected_type"
+    return 2
   elif [[ ! "$detected_type" =~ ^"$file_type" ]]
   then
-    echoerr "Error: given type ${file_type} does not match detected type ${detected_type}"
+    echoerr "Error: given type ${file_type} does not match detected type ${detected_type} for '${source_file}'"
     exit 1
   fi
   case "$file_type" in

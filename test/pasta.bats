@@ -645,17 +645,17 @@ teardown() {
   dir_name="my_dir"
   external_dir="${TMP_DIR}/${dir_name}"
   mkdir "$external_dir"
-  text_name="${dir_name}/my_text"
-  text_file="${TMP_DIR}/${text_name}.txt"
+  text_name="my_text"
+  text_file="${external_dir}/${text_name}.txt"
   echo data > "$text_file"
   jpg_name="my_jpg"
-  jpg_file="${TMP_DIR}/${jpg_name}.jpg"
+  jpg_file="${external_dir}/${jpg_name}.jpg"
   create_white_img "$jpg_file" 15 15
-  inner_dir_name="${dir_name}/inner_dir"
-  inner_dir="${TMP_DIR}/${inner_dir_name}"
+  inner_dir_name="inner_dir"
+  inner_dir="${external_dir}/${inner_dir_name}"
   mkdir "${inner_dir}"
   png_name="${inner_dir_name}/my_png"
-  png_file="${TMP_DIR}/${png_name}.png"
+  png_file="${external_dir}/${png_name}.png"
   create_white_img "$png_file" 12 12
 
   new_dir_name="imported_dir"
@@ -806,7 +806,7 @@ teardown() {
   empty_name="${dir_name}/empty"
   empty_path="${TMP_DIR}/${empty_name}.file"
   touch "$empty_path"
-  run "$PASTA" import "$dir_path"
+  run "$PASTA" import -r "$dir_path"
   [[ "$status" -eq 2 ]]
   clean_output
   # Import should succeed for the text and image files.
@@ -814,8 +814,8 @@ teardown() {
   text_pasta="${PASTA_DIR}/${text_name}.txt"
   [[ -f "$text_pasta" ]]
   diff "$text_pasta" "$text_path"
-  [[ "$out" =~ "Could not import '${binary_path}' because of the following error:"$'\n'"Error: unknown MIME type" ]]
-  [[ "$out" =~ "Could not import '${empty_path}' because of the following error:"$'\n'"Error: '${empty_path}' is empty" ]]
+  [[ "$out" =~ "Error: '${binary_path}' has unknown MIME type" ]]
+  [[ "$out" =~ "Error: '${empty_path}' is empty" ]]
   rm "$text_pasta"
   # This should succeed if nothing else was copied into that directory.
   rmdir "${PASTA_DIR}/$dir_name"
