@@ -961,8 +961,6 @@ teardown() {
 }
 
 @test "pasta export copies the text pasta to the given location" {
-  CLEANUP=1
-  skip "pasta export has not been implemented yet"
   pasta_name="text_pasta"
   pasta_file="${PASTA_DIR}/${pasta_name}.txt"
   echo "something" > "$pasta_file"
@@ -975,8 +973,6 @@ teardown() {
 }
 
 @test "pasta export copies the image pasta to the given location" {
-  CLEANUP=1
-  skip "pasta export has not been implemented yet"
   pasta_name="img_pasta"
   pasta_file="${PASTA_DIR}/${pasta_name}.png"
   create_white_img "$pasta_file"
@@ -988,9 +984,7 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta export converts the image pasta to jpeg" {
-  CLEANUP=1
-  skip "pasta export has not been implemented yet"
+@test "pasta export converts the image pasta to jpg" {
   pasta_name="img_pasta"
   pasta_file="${PASTA_DIR}/${pasta_name}.png"
   create_white_img "$pasta_file"
@@ -1003,9 +997,79 @@ teardown() {
   CLEANUP=1
 }
 
+@test "pasta export copies the directory to the given location" {
+  pasta_dir_name="my_dir"
+  pasta_dir_path="${PASTA_DIR}/${pasta_dir_name}"
+  mkdir "$pasta_dir_path"
+  text_name="my_text"
+  text_pasta="${pasta_dir_path}/${text_name}.txt"
+  echo "some data" > "$text_pasta"
+  subdir_name="inner_dir"
+  subdir_path="${pasta_dir_path}/${subdir_name}"
+  mkdir "$subdir_path"
+  image_name="my_image"
+  image_pasta="${subdir_path}/${image_name}.png"
+  create_white_img "$image_pasta"
+
+  external_dir="${TMP_DIR}/external_dir"
+  external_text="${external_dir}/${text_name}.txt"
+  external_subdir="${external_dir}/$subdir_name"
+  external_image="${external_subdir}/${image_name}.png"
+  for recurse_flag in "-r" "--recursive"
+  do
+    ERROR_MSG="testing 'pasta export ${recurse_flag}'"
+    run "$PASTA" export "$recurse_flag" "$pasta_dir_name" "$external_dir"
+    [[ "$status" -eq 0 ]]
+    [[ -d "$external_dir" ]]
+    clean_output
+    [[ "$out" =~ "Exported text pasta" ]]
+    [[ -f "$external_text" ]]
+    diff "$external_text" "$text_pasta"
+    [[ -d "$external_subdir" ]]
+    [[ "$out" =~ "Exported image pasta" ]]
+    [[ -f "$external_image" ]]
+    diff "$external_image" "$image_pasta"
+    rm -r "$external_dir"
+  done
+}
+
+@test "pasta export copies everything if the --all flag is given" {
+  image_name="my_image"
+  image_pasta="${PASTA_DIR}/${image_name}.png"
+  create_white_img "$image_pasta"
+  pasta_dir_name="my_dir/subdir"
+  pasta_dir_path="${PASTA_DIR}/${pasta_dir_name}"
+  mkdir -p "$pasta_dir_path"
+  text_name="my_text"
+  text_pasta="${pasta_dir_path}/${text_name}.txt"
+  echo "some data" > "$text_pasta"
+
+  external_dir="${TMP_DIR}/external_dir"
+  external_image="${external_dir}/${image_name}.png"
+  external_subdir="${external_dir}/${pasta_dir_name}"
+  external_text="${external_subdir}/${text_name}.txt"
+  for all_flag in "-a" "--all" "." "/"
+  do
+    for recurse_flag in "" "-r" "--recursive"
+    do
+      ERROR_MSG="testing 'pasta export ${recurse_flag} ${all_flag}'"
+      run "$PASTA" export $recurse_flag "$all_flag" "$external_dir"
+      [[ "$status" -eq 0 ]]
+      [[ -d "$external_dir" ]]
+      clean_output
+      [[ "$out" =~ "Exported image pasta" ]]
+      [[ -f "$external_image" ]]
+      diff "$external_image" "$image_pasta"
+      [[ -d "$external_subdir" ]]
+      [[ "$out" =~ "Exported text pasta" ]]
+      [[ -f "$external_text" ]]
+      diff "$external_text" "$text_pasta"
+      rm -r "$external_dir"
+    done
+  done
+}
+
 @test "pasta export accepts names with slashes and spaces" {
-  CLEANUP=1
-  skip "pasta export has not been implemented yet"
   pasta_name="export/slashes/and/spaces/in name"
   pasta_file="${PASTA_DIR}/${pasta_name}.txt"
   ensure_parent_dirs "$pasta_file"
@@ -1019,17 +1083,14 @@ teardown() {
 }
 
 @test "pasta export fails when given too few arguments" {
-  CLEANUP=1
-  skip "pasta export has not been implemented yet"
   pasta_name="a_pasta"
   pasta_file="${PASTA_DIR}/${pasta_name}.txt"
   echo "text data" >"$pasta_file"
   for force_flag in "" "-f" "--force"
   do
-    for first_arg in "" "$pasta_file"
+    for first_arg in "" "-a" "$pasta_file"
     do
       ERROR_MSG="testing 'pasta export ${force_flag} ${first_arg}'"
-      # Check when no pasta name is given.
       run "$PASTA" export $force_flag $first_arg
       [[ "$status" -eq 2 ]]
       clean_output
@@ -1048,6 +1109,20 @@ teardown() {
   clean_output
   [[ "$out" =~ "does not exist" ]]
   [[ ! -f "$out_file" ]]
+  CLEANUP=1
+}
+
+@test "pasta export fails when exporting a directory without the recursive flag" {
+  dir_name="dir"
+  dir_path="${PASTA_DIR}/${dir_name}"
+  dir_file="${dir_path}/file.txt"
+  ensure_parent_dirs "$dir_file"
+  echo "data" > "$dir_file"
+  run "$PASTA" export "$dir_path"
+  [[ "$status" -eq 2 ]]
+  clean_output
+  [[ "$out" =~ "is a directory. Please use the --recursive flag"$ ]]
+  check_no_pastas
   CLEANUP=1
 }
 
