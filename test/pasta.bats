@@ -967,6 +967,8 @@ teardown() {
   text_file="${TMP_DIR}/textfile.out"
   run "$PASTA" export "$pasta_name" "$text_file"
   [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ "Exported text pasta" ]]
   [[ -f "$text_file" ]]
   diff "$text_file" "$pasta_file"
   CLEANUP=1
@@ -979,6 +981,8 @@ teardown() {
   image_file="${TMP_DIR}/image.png"
   run "$PASTA" export "$pasta_name" "$image_file"
   [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ "Exported image pasta" ]]
   [[ -f "$image_file" ]]
   diff "$image_file" "$pasta_file"
   CLEANUP=1
@@ -991,6 +995,8 @@ teardown() {
   image_file="${TMP_DIR}/image.jpg"
   run "$PASTA" export "$pasta_name" "$image_file"
   [[ "$status" -eq 0 ]]
+  [[ "$out" =~ "Exported image pasta" ]]
+  [[ -f "$image_file" ]]
   [[ -f "$image_file" ]]
   [[ "$(file --mime-type -b "$image_file")" == "image/jpeg" ]]
   imgdiff "$image_file" "$pasta_file"
@@ -1031,6 +1037,23 @@ teardown() {
     diff "$external_image" "$image_pasta"
     rm -r "$external_dir"
   done
+  CLEANUP=1
+}
+
+@test "pasta export copies into a directory" {
+  pasta_name="a_pasta"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo data > "$pasta_file"
+  external_dir="${TMP_DIR}/my_dir"
+  mkdir "$external_dir"
+  run "$PASTA" export "$pasta_name" "$external_dir"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Exported text pasta" ]]
+  external_file="${external_dir}/${pasta_name}.txt"
+  [[ -f "$external_file" ]]
+  diff "$external_file" "$pasta_file"
+  CLEANUP=1
 }
 
 @test "pasta export copies everything if the --all flag is given" {
@@ -1101,8 +1124,6 @@ teardown() {
 }
 
 @test "pasta export fails when given a nonexistent pasta" {
-  CLEANUP=1
-  skip "pasta export has not been implemented yet"
   out_file="${TMP_DIR}/data.out"
   run "$PASTA" export nonexistent "$out_file"
   [[ "$status" -eq 2 ]]
@@ -1124,6 +1145,29 @@ teardown() {
   [[ "$out" =~ "is a directory. Please use the --recursive flag"$ ]]
   check_no_pastas
   CLEANUP=1
+}
+
+@test "pasta export rejects sneaky directory traversal names" {
+  setup_sneaky_paths_test read
+  external_path="${TMP_DIR}/../$(basename "$TMP_DIR")/exportpath.txt"
+  for sneaky_name in "${sneaky_names[@]}"
+  do
+    ERROR_MSG="testing 'pasta export' on sneaky path '${sneaky_path}'"
+    run "$PASTA" export "$sneaky_name"
+    [[ "$status" -eq 2 ]]
+    clean_output
+    [[ "$out" =~ "is an invalid pasta name" ]]
+    [[ ! -e "$external_path" ]]
+  done
+  CLEANUP=1
+}
+
+@test "pasta export works when overwriting" {
+  pasta_name="some_pasta"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo "my data" > "$pasta_file"
+  external_path="${TMP_DIR}/overwritten_file.out"
+# TODO: finish
 }
 
 @test "pasta show displays a text pasta" {
