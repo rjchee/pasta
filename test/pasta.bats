@@ -684,9 +684,60 @@ teardown() {
   CLEANUP=1
 }
 
-@test "pasta import imports a compressed file" {
+@test "pasta import imports a compressed file from pasta export" {
+  text_pasta="my_text"
+  pasta_subdir="my_subdir"
+  image_pasta="my_image"
+  text_pasta_file="${PASTA_DIR}/${text_pasta}.txt"
+  echo "data" > "$text_pasta_file"
+  pasta_subdir_path="${PASTA_DIR}/$pasta_subdir"
+  mkdir "$pasta_subdir_path"
+  image_pasta_file="${pasta_subdir_path}/${image_pasta}.png"
+  create_white_img "$image_pasta_file"
+  orig_pasta_dir="$PASTA_DIR"
+  for all_flag in "-a" "--all"
+  do
+    for recurse_flag in "-r" "--recursive"
+    do
+      for compress_flag in "-c" "--compressed"
+      do
+        [[ "${all_flag:0:1}" == "-" ]] && flags="${all_flag} ${recurse_flag} $compress_flag" || flags="${recurse_flag} ${compress_flag} $all_flag"
+        for external_path in "$TMP_DIR" "${TMP_DIR}/export.tar.gz"
+        do
+          ERROR_MSG="testing 'pasta export ${flags} ${external_path}'"
+          run "$PASTA" export $flags "$external_path"
+          [[ "$status" -eq 0 ]]
+          [[ -d "$external_path" ]] && compressed_path="${external_path}/pastas.tar.gz" || compressed_path="$external_path"
+          clean_output
+          [[ "$out" =~ "Exported".*"$compressed_path" ]]
+          [[ -f "$compressed_path" ]]
+          rm "$PASTA_SETTINGS"
+          export PASTA_DIR="${TMP_DIR}/pasta_dir.${all_flag}${recurse_flag}${compress_flag}"
+          run "$PASTA" init "$PASTA_DIR"
+          [[ "$status" -eq 0 ]]
+          run "$PASTA" import "$external_path"
+          [[ "$status" -eq 0 ]]
+          clean_output
+          [[ "$out" =~ "Imported text pasta" ]]
+          imported_text_path="${PASTA_DIR}/${text_pasta}.txt"
+          [[ -f "$imported_text_path" ]]
+          diff "$imported_text_path" "$text_pasta_file"
+          imported_subdir_path="${PASTA_DIR}/$pasta_subdir"
+          [[ -d "$imported_subdir_path" ]]
+          [[ "$out" =~ "Imported image pasta" ]]
+          imported_image_path="${PASTA_DIR}/${pasta_subdir}/${image_pasta}.png"
+          [[ -f "$imported_image_path" ]]
+          diff "$imported_image_path" "$image_pasta_file"
+
+          rm "$compressed_path"
+          export PASTA_DIR="$orig_pasta_dir"
+          run "$PASTA" init "$PASTA_DIR"
+          [[ "$status" -eq 0 ]]
+        done
+      done
+    done
+  done
   CLEANUP=1
-  skip "This functionality has not been implemented yet"
 }
 
 @test "pasta import accepts names with slashes and spaces" {
@@ -995,6 +1046,7 @@ teardown() {
   image_file="${TMP_DIR}/image.jpg"
   run "$PASTA" export "$pasta_name" "$image_file"
   [[ "$status" -eq 0 ]]
+  clean_output
   [[ "$out" =~ "Exported image pasta" ]]
   [[ -f "$image_file" ]]
   [[ -f "$image_file" ]]
@@ -1041,18 +1093,44 @@ teardown() {
 }
 
 @test "pasta export copies into a directory" {
-  pasta_name="a_pasta"
-  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
-  echo data > "$pasta_file"
+  text_pasta="a_pasta"
+  text_pasta_file="${PASTA_DIR}/${text_pasta}.txt"
+  echo data > "$text_pasta_file"
   external_dir="${TMP_DIR}/my_dir"
   mkdir "$external_dir"
-  run "$PASTA" export "$pasta_name" "$external_dir"
+  run "$PASTA" export "$text_pasta" "$external_dir"
   [[ "$status" -eq 0 ]]
   clean_output
   [[ "$out" =~ ^"Exported text pasta" ]]
-  external_file="${external_dir}/${pasta_name}.txt"
+  external_file="${external_dir}/${text_pasta}.txt"
   [[ -f "$external_file" ]]
-  diff "$external_file" "$pasta_file"
+  diff "$external_file" "$text_pasta_file"
+
+  image_pasta="image_pasta"
+  image_pasta_file="${PASTA_DIR}/${image_pasta}.png"
+  create_white_img "$image_pasta_file"
+  run "$PASTA" export "$image_pasta" "$external_dir"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Exported image pasta" ]]
+  external_image="${external_dir}/${image_pasta}.png"
+  [[ -f "$external_image" ]]
+  diff "$external_image" "$image_pasta_file"
+
+  pasta_subdir="subdir"
+  pasta_subdir_image="image"
+  pasta_subdir_file="${PASTA_DIR}/${pasta_subdir}/${pasta_subdir_image}.png"
+  ensure_parent_dirs "$pasta_subdir_file"
+  create_white_img "$pasta_subdir_file"
+  run "$PASTA" export -r "$pasta_subdir" "$external_dir"
+  [[ "$status" -eq 0 ]]
+  clean_output
+  [[ "$out" =~ ^"Exported image pasta" ]]
+  external_subdir="${external_dir}/${pasta_subdir}"
+  [[ -d "$external_subdir" ]]
+  external_subdir_file="${external_subdir}/${pasta_subdir_image}.png"
+  [[ -f "$external_subdir_file" ]]
+  diff "$external_subdir_file" "$pasta_subdir_file"
   CLEANUP=1
 }
 
@@ -1073,7 +1151,10 @@ teardown() {
   external_text="${external_subdir}/${text_name}.txt"
   for all_flag in "-a" "--all" "." "/"
   do
-    for recurse_flag in "" "-r" "--recursive"
+    recurse_flag_list=("-r" "--recursive")
+    # If the --all flag is given, -r is implied so it can be omitted.
+    [[ "${all_flag:0:1}" != "-" ]] || recurse_flag_list+=("")
+    for recurse_flag in "${recurse_flag_list[@]}"
     do
       ERROR_MSG="testing 'pasta export ${recurse_flag} ${all_flag}'"
       run "$PASTA" export $recurse_flag "$all_flag" "$external_dir"
@@ -1090,6 +1171,7 @@ teardown() {
       rm -r "$external_dir"
     done
   done
+  CLEANUP=1
 }
 
 @test "pasta export accepts names with slashes and spaces" {
@@ -1135,15 +1217,15 @@ teardown() {
 
 @test "pasta export fails when exporting a directory without the recursive flag" {
   dir_name="dir"
-  dir_path="${PASTA_DIR}/${dir_name}"
-  dir_file="${dir_path}/file.txt"
+  dir_file="${PASTA_DIR}/${dir_name}/file.txt"
   ensure_parent_dirs "$dir_file"
   echo "data" > "$dir_file"
-  run "$PASTA" export "$dir_path"
+  external_path="${TMP_DIR}/export_dir"
+  run "$PASTA" export "$dir_name" "$external_path"
   [[ "$status" -eq 2 ]]
   clean_output
   [[ "$out" =~ "is a directory. Please use the --recursive flag"$ ]]
-  check_no_pastas
+  [[ ! -e "$external_path" ]]
   CLEANUP=1
 }
 
@@ -1152,8 +1234,8 @@ teardown() {
   external_path="${TMP_DIR}/../$(basename "$TMP_DIR")/exportpath.txt"
   for sneaky_name in "${sneaky_names[@]}"
   do
-    ERROR_MSG="testing 'pasta export' on sneaky path '${sneaky_path}'"
-    run "$PASTA" export "$sneaky_name"
+    ERROR_MSG="testing 'pasta export' on sneaky path '${sneaky_name}'"
+    run "$PASTA" export "$sneaky_name" "$external_path"
     [[ "$status" -eq 2 ]]
     clean_output
     [[ "$out" =~ "is an invalid pasta name" ]]
@@ -1163,11 +1245,82 @@ teardown() {
 }
 
 @test "pasta export works when overwriting" {
-  pasta_name="some_pasta"
-  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
-  echo "my data" > "$pasta_file"
   external_path="${TMP_DIR}/overwritten_file.out"
-# TODO: finish
+  touch "$external_path"
+
+  # Test overwriting a file with a text pasta
+  text_name="some_text_pasta"
+  text_pasta="${PASTA_DIR}/${text_name}.txt"
+  echo "my data" > "$text_pasta"
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} export '${text_name}' '${external_path}'"
+  [[ "$status" -eq 3 ]]
+  # Should be an empty file
+  [[ -f "$external_path" ]]
+  [[ ! -s "$external_path" ]]
+  # Check behavior when yes is given
+  run bash -c "echo y | ${PASTA} export '${text_name}' '${external_path}'"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ -f "$external_path" ]]
+  diff "$external_path" "$text_pasta"
+
+  # Test overwriting a file with an image pasta
+  image_name="some_image_pasta"
+  image_pasta="${PASTA_DIR}/${image_name}.png"
+  create_white_img "$image_pasta"
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} export '${image_name}' '${external_path}'"
+  [[ "$status" -eq 3 ]]
+  # User rejected overwriting, so data should still be text.
+  [[ -f "$external_path" ]]
+  diff "$external_path" "$text_pasta"
+  # Check behavior when yes is given
+  run bash -c "echo y | ${PASTA} export '${image_name}' '${external_path}'"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ -f "$external_path" ]]
+  diff "$external_path" "$image_pasta"
+
+  # Test overwriting a file with a directory
+  dir_name="some_dir"
+  dir_path="${PASTA_DIR}/$dir_name"
+  mkdir "$dir_path"
+  inner_file="${dir_path}/blah.txt"
+  echo "something" > "$inner_file"
+  # Check behavior when no is given.
+  run bash -c "echo n | ${PASTA} export -r '${dir_name}' '${external_path}'"
+  [[ "$status" -eq 3 ]]
+  # User rejected overwriting, so data should still be an image.
+  [[ -f "$external_path" ]]
+  diff "$external_path" "$image_pasta"
+  # Check behavior when yes is given
+  run bash -c "echo y | ${PASTA} export -r '${dir_name}' '${external_path}'"
+  [[ "$status" -eq 0 ]]
+  # Data should be updated.
+  [[ -d "$external_path" ]]
+  external_inner_file="${external_path}/$(basename "$inner_file")"
+  [[ -f "$external_inner_file" ]]
+  diff "$external_inner_file" "$inner_file"
+  CLEANUP=1
+}
+
+@test "pasta export with the force flag doesn't ask for overwrite" {
+  pasta_name="textfile"
+  pasta_file="${PASTA_DIR}/${pasta_name}.txt"
+  echo "new data" > "$pasta_file"
+  external_path="${TMP_DIR}/external.txt"
+  for force_flag in '-f' '--force'
+  do
+    echo "old data" > "$external_path"
+    # Echo no to pasta which should be ignored.
+    run bash -c "echo n | ${PASTA} export ${force_flag} '${pasta_name}' '${external_path}'"
+    [[ "$status" -eq 0 ]]
+    [[ -f "$external_path" ]]
+    diff "$external_path" "$pasta_file"
+    rm "$external_path"
+  done
+  CLEANUP=1
 }
 
 @test "pasta show displays a text pasta" {

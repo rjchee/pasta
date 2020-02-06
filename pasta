@@ -256,8 +256,7 @@ pasta_import() {
     [[ -n "$recursive" ]] || quit "Error: '${file}' is a directory. Please use the --recursive flag"
     get_pasta_dir
     check_pasta_name_safety "$pasta_name"
-    local inner_file inner_pasta_name
-    local retcode=0
+    local inner_file inner_pasta_name retcode=0
     while read -r inner_file
     do
       inner_pasta_name="${pasta_name}/${inner_file%.*}"
@@ -283,7 +282,89 @@ pasta_import_file() {
 }
 
 pasta_export() {
-  not_implemented
+  local recursive="" compressed="" force="" all=""
+  while true
+  do
+    case "${1:-}" in
+      -r|--recursive) recursive="-r" ;;
+      -c|--compressed) not_implemented; compressed="compressed" ;;
+      -f|--force) force="force" ;;
+      -a|--all) all="all" ;;
+      --) shift; break ;;
+      -*) flagquit "$1" ;;
+      # Done with flags
+      *) break ;;
+    esac
+    shift
+  done
+  local pasta_name export_path pasta_type pasta_file description
+  if [[ "$all" == "all" ]]
+  then
+    [[ "$#" -eq 1 ]] || usagequit export
+    description="pasta directory"
+    export_path="$1"
+    pasta_type="dir"
+    get_pasta_dir
+    pasta_file="$PASTA_DIR"
+    recursive="-r"
+  else
+    [[ "$#" -eq 2 ]] || usagequit export
+    pasta_name="$1"
+    export_path="$2"
+    check_pasta_name "$pasta_name" read pasta_type pasta_file
+    if [[ "$pasta_type" == "dir" ]] && [[ -z "$recursive" ]]
+    then
+      quit "Error: '${pasta_name}' is a directory. Please use the --recursive flag"
+    fi
+    case "$pasta_type" in
+      dir) description="directory" ;;
+      text) description="text pasta" ;;
+      image) description="image pasta" ;;
+      *) echoerr "Error: unknown pasta type '${pasta_type}'"; exit 1 ;;
+    esac
+    description="${description} '${pasta_name}'"
+  fi
+  if [[ "$pasta_type" == "dir" ]]
+  then
+    if [[ -d "$export_path" ]] && [[ ! "$pasta_file" -ef "$PASTA_DIR" ]]
+    then
+      export_path="${export_path}/$(basename "$pasta_file")"
+    fi
+    check_exists "$export_path" "$export_path"
+    local inner_pasta_file export_inner_path
+    while read -r inner_pasta_file
+    do
+      export_inner_path="${export_path}/$inner_pasta_file"
+      ensure_parent_dirs "$export_inner_path"
+      pasta_export_file "${pasta_file}/$inner_pasta_file" "$export_inner_path" "$force"
+    done < <(find "$pasta_file" -type f -exec realpath --relative-to="$pasta_file" {} \;)
+  else
+    ensure_parent_dirs "$export_path"
+    pasta_export_file "$pasta_file" "$export_path" "$force"
+  fi
+}
+
+pasta_export_file() {
+  local pasta_file="$1"
+  local export_path="$2"
+  local force="$3"
+  [[ -n "$force" ]] || check_exists "$export_path" "$export_path"
+  # Specify the full name of the export path if a directory is given.
+  [[ ! -d "$export_path" ]] || export_path="${export_path}/$(basename "$pasta_file")"
+  local pasta_name="$(realpath "$pasta_file" --relative-to="$PASTA_DIR")"
+  pasta_name="${pasta_name%.*}"
+  case "$pasta_file" in
+    *.txt)
+      cp "$pasta_file" "$export_path"
+      echo "Exported text pasta '${pasta_name}' to '${export_path}'"
+      ;;
+    *.png)
+      convert "$pasta_file" "$export_path"
+      echo "Exported image pasta '${pasta_name}' to '${export_path}'"
+      ;;
+    # Print an error but don't fail
+    *) echoerr "Error: unknown pasta type in file '${pasta_file}'" ;;
+  esac
 }
 
 pasta_show() {
@@ -517,7 +598,7 @@ before using pasta."
 
 # Usage: check_exists FILE DESCRIPTION
 check_exists() {
-  [[ ! -f "$1" ]] || { yesno "$2 already exists. Overwrite it?"; rm "$1"; }
+  [[ ! -f "$1" ]] || { yesno "$2 already exists. Overwrite it?"; rm -r "$1"; }
 }
 
 # Usage: check pasta_name_safety PASTA_NAME
