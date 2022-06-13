@@ -1320,6 +1320,46 @@ teardown() {
   CLEANUP=1
 }
 
+@test "pasta find locates the expected pastas" {
+  match_term="abcd123"
+  match_files=( "${match_term}.txt" "x${match_term}y.png" "dir/${match_term}.png" "dir/a b ${match_term}.txt" )
+  non_match_files=( "${match_term:1}.png" "${match_term:0:-1}.txt" "${match_term:0:3} ${match_term:3}.txt" "${match_term:0:3}/${match_term:3}.png" "dir/${match_term:1}.txt" )
+  for file in "${match_files[@]}"
+  do
+    file_path="${PASTA_DIR}/${file}"
+    ensure_parent_dirs "$file_path"
+    [[ "$file" =~ *.txt ]] && echo blah > "$file_path" || create_white_img "$file_path"
+  done
+  ERROR_MSG="getting file tree for testing find output with 'pasta list'"
+  run "$PASTA" list
+  [[ "$status" -eq 0 ]]
+  clean_output
+  match_output="$(echo "$out" | tail -n +2)"
+
+  for file in "${non_match_files[@]}"
+  do
+    file_path="${PASTA_DIR}/${file}"
+    ensure_parent_dirs "$file_path"
+    [[ "$file" =~ *.txt ]] && echo blah > "$file_path" || create_white_img "$file_path"
+  done
+
+  for find_cmd in "find" "search"
+  do
+    ERROR_MSG="testing find command 'pasta ${find_cmd}'"
+    run "$PASTA" $find_cmd "$match_term"
+    [[ "$status" -eq 0 ]]
+    clean_output
+    [[ "$(echo "$out" | head -n 1)" == "Search term: '${match_term}'" ]]
+    echo expected
+    echo "$match_output"
+    echo actual
+    actual="$(echo "$out" | tail -n +2)"
+    echo "$actual"
+    [[ "$actual" == "$match_output" ]]
+  done
+  CLEANUP=1
+}
+
 @test "pasta alias creates a link to the text pasta at the given location" {
   target_name="text_pasta"
   target_file="${PASTA_DIR}/${target_name}.txt"

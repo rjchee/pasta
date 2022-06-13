@@ -41,7 +41,7 @@ _pasta_usage() {
     export) echo "${prefix} export [--recursive,-r] [--compressed,-c] [--force,-f] --all,-a|PASTA_NAME PATH" ;;
     show|inspect) echo "${prefix} show|inspect PASTA_NAME" ;;
     list|ls) echo "${prefix} [list|ls] [DIRECTORY]" ;;
-    find) echo "${prefix} find PASTA_NAMES" ;;
+    find|search) echo "${prefix} find|search [[--image,-i]|[--text,-t]] PASTA_NAMES" ;;
     grep) echo "${prefix} grep SEARCH_STRING" ;;
     alias|ln) echo "${prefix} alias|ln [--verbose,-v] [--symbolic,-s] [--force,-f] PASTA_NAME PASTA_ALIAS" ;;
     cp) echo "${prefix} cp [--verbose,-v] [--recursive,-r] [--force,-f] SOURCE_PASTA DEST_PASTA" ;;
@@ -96,7 +96,12 @@ _pasta_usage() {
       ;;
     inspect|show) echo "${prefix} Show the copypasta." ;;
     list|ls) echo "${prefix} List copypastas." ;;
-    find) echo "${prefix} List copypastas which match the pasta names." ;;
+    find|search)
+      echo "${prefix} List copypastas which contain the pasta name(s). If --image is "
+      echo "${prefix} given, only look for image copypastas. If --text is given, only "
+      echo "${prefix} look for text copypastas. Otherwise, look for both types of "
+      echo "${prefix} copypastas."
+      ;;
     grep) echo "${prefix} Search text copypastas which contain the search string." ;;
     alias|ln) echo "${prefix} Create a link to PASTA_NAME named PASTA_ALIAS." ;;
     cp) echo "${prefix} Create a copy of SOURCE_PASTA named DEST_PASTA." ;;
@@ -329,16 +334,40 @@ pasta_list_dir() {
     fi
   fi
 
-  # Output the tree, removing the root of the tree or the .txt or .png extension but keeping any
-  # colors.  Note: this also removes the extension from directories which
-  # end an extension, which is a bug. One way to possibly fix this is to
-  # detect the color code for directories and check for that, or replace
-  # tree with our own implementation.
-  tree -C --noreport "$full_path" | tail -n +2 | sed -r 's/\.(txt|png)(\x1b\[00m)?$/\2/'
+  format_pasta_paths "$full_path"
 }
 
 pasta_find() {
-  not_implemented
+  local filetype=""
+  while true
+  do
+    case "${1:-}" in
+      -i|--image)
+        [[ -z "$filetype" ]] || usagequit
+        filetype="png"
+        shift
+        ;;
+      -t|--text)
+        [[ -z "$filetype" ]] || usagequit
+        filetype="txt"
+        shift
+        ;;
+      --) shift; break ;;
+      -*) flagquit "$1" ;;
+      # Done with flags
+      *) break ;;
+    esac
+    shift
+  done
+  [[ $# -ge 1 ]] || usagequit
+  local pattern_suffix=""
+  [[ -z "$filetype" ]] || pattern_suffix=".${filetype}"
+  get_pasta_dir
+  for term in "$@"
+  do
+    echo "Search term: '$term'"
+    format_pasta_paths "$PASTA_DIR" -P "*${term}*${filetype:+.${filetype}}"
+  done
 }
 
 pasta_grep() {
@@ -675,6 +704,16 @@ create_pasta_from_file() {
   ensure_parent_dirs "$pasta_file"
   cp "$source_file" "$pasta_file"
   echo "Created ${file_type} pasta '${pasta_name}'"
+}
+
+# Outputs the path(s) in a nice format.
+format_pasta_paths() {
+  # Output the tree, removing the root of the tree or the .txt or .png
+  # extension but keeping any colors. Note: this also removes the extension
+  # from directories which end an extension, which is a bug. One way to
+  # possibly fix this is to detect the color code for directories and check for
+  # that, or replace tree with our own implementation.
+  tree -C --noreport --prune $* | tail -n +2 | sed -r 's/\.(txt|png)(\x1b\[0m)?$/\2/'
 }
 # END helper functions
 
