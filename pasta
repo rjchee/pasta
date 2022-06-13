@@ -111,7 +111,7 @@ _pasta_usage() {
 }
 
 pasta_usage() {
-  [[ "$#" -le 1 ]] || usagequit usage
+  [[ "$#" -le 1 ]] || usagequit
   if [[ "$#" -eq 1 ]]
   then
     _pasta_usage "$1" full
@@ -127,7 +127,7 @@ pasta_usage() {
 }
 
 pasta_init() {
-  [[ "$#" -le 1 ]] || usagequit init
+  [[ "$#" -le 1 ]] || usagequit
   check_exists "$PASTA_SETTINGS" "A pasta directory"
   local pasta_dir="$HOME/.pastas"
   if [[ "$#" -eq 1 ]]
@@ -147,7 +147,7 @@ pasta_save() {
     --) shift ;;
     -*) flagquit "$1" ;;
   esac
-  [[ "$#" -ge 1 ]] || usagequit save
+  [[ "$#" -ge 1 ]] || usagequit
   local pasta_name="$*"
   check_pasta_name "$pasta_name" write "${force:-}"
   local temp_file
@@ -195,7 +195,7 @@ pasta_insert() {
     --) shift ;;
     -*) flagquit "$1" ;;
   esac
-  [[ "$#" -ge 1 ]] || usagequit insert
+  [[ "$#" -ge 1 ]] || usagequit
   local pasta_name="$*"
   check_pasta_name "$pasta_name" write "${force:-}"
   local temp_file
@@ -209,7 +209,7 @@ pasta_insert() {
 }
 
 pasta_edit() {
-  [[ "$#" -ge 1 ]] || usagequit edit
+  [[ "$#" -ge 1 ]] || usagequit
   local pasta_name="$*"
   local pasta_type pasta_file
   check_pasta_name "$pasta_name" read pasta_type pasta_file
@@ -237,7 +237,7 @@ pasta_import() {
     esac
     shift
   done
-  [[ $# -ge 1 ]] || usagequit import
+  [[ $# -ge 1 ]] || usagequit
   local file="$1"
   local pasta_name="${*:2}"
   # Infer the pasta name from the name of the file without the extension (if any).
@@ -374,7 +374,7 @@ pasta_move() {
     esac
     shift
   done
-  [[ "$#" -ge 2 ]] || usagequit "$COMMAND"
+  [[ "$#" -ge 2 ]] || usagequit
   local source_pasta="$1"
   local dest_pasta="${*:2}"
   local source_type source_file
@@ -440,7 +440,7 @@ pasta_delete() {
     --) shift ;;
     -*) flagquit "$1" ;;
   esac
-  [[ "$#" -ge 1 ]] || usagequit delete
+  [[ "$#" -ge 1 ]] || usagequit
   local pasta_name pasta_type pasta_file
   for pasta_name in "$@"
   do
@@ -483,7 +483,7 @@ quit() {
 # Exit with the usage message.
 # Usage: usagequit command
 usagequit() {
-  _pasta_usage "$1" >&2
+  _pasta_usage "$COMMAND" >&2
   exit 2
 }
 
